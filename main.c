@@ -74,8 +74,8 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
 static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *buf){
     register uint16_t time_val = ((timer_h << 8) | timer_l);
     time_val = time_val*TIMER_0_CONST;
-    *buf++ = time_val;
-    *buf = (time_val >> 8) & 0xff;
+    *buf++ = (time_val >> 8) & 0xff;
+    *buf = time_val;
 }
 
 /** @brief A Structure, holdingextern uint8_t  Irdroid USB Infrared Transceiver IRs data */
@@ -174,8 +174,8 @@ void main(void) {
   OLED_print("_\r");
   beep();
   // buffer to store the data coming from the host alternatevly use the USB CDC buffer
-  buf[0] = 0;
-  buf[1] = 70;
+  buf[0] = 0x1;
+  buf[1] = 0x2C;
   // Take into consideration the differences for minimal time unit between Irdroid and CH552 timers
   align_irtoy_ch552(buf[0], buf[1], buf);
 
