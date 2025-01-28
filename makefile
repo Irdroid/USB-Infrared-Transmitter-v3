@@ -1,8 +1,8 @@
 # ===================================================================================
-# Project:  USB CDC OLED Terminal for CH55x
-# Author:   Stefan Wagner
-# Year:     2022
-# URL:      https://github.com/wagiminator
+# Project:  Irdroid USB Infrared Transceiver for CH551, CH552, CH554
+# Author:   Georgi Bakalski
+# Year:     2025
+# URL:      https://github.com/irdroid
 # ===================================================================================         
 # Type "make help" in the command line.
 # ===================================================================================

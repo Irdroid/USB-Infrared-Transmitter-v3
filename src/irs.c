@@ -17,6 +17,12 @@ extern volatile __xdata uint8_t CDC_writePointer;
 uint8_t * cdc_Out_Buffer = (uint8_t *) EP2_buffer; 
 uint8_t * cdc_In_Buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
 
+static unsigned char TxBuffCtr;
+__xdata struct _irtoy irToy;
+
+#define IRS_TRANSMIT_HI	0
+#define IRS_TRANSMIT_LO	1
+
 /** @brief A Structure, holdingextern uint8_t  Irdroid USB Infrared Transceiver IRs data */
 static struct {
     unsigned char RXsamples;
@@ -54,6 +60,23 @@ static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *
     *buf = time_val;
 }
 
+uint8_t getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
+    
+    if(CDC_available()){
+        
+        if(len > CDC_readByteCount){
+            len = CDC_readByteCount;
+        }
+        
+        for (CDC_readByteCount; CDC_readByteCount < len; CDC_readByteCount++){
+             buffer[len] = cdc_Out_Buffer[CDC_readByteCount];
+        }
+               
+
+    }
+    return CDC_readByteCount;
+}
+
 void GetUsbIrdroidVersion(void) {
         cdc_In_Buffer[0] = 'V'; //answer OK
         cdc_In_Buffer[1] = '2';
@@ -65,6 +88,13 @@ void GetUsbIrdroidVersion(void) {
 }
 
 void irsSetup(void) {
+     
+    cdc_In_Buffer[0] = 'S'; //answer that we are in sampling mode
+    cdc_In_Buffer[1] = '0';
+    cdc_In_Buffer[2] = '1';
+    WaitInReady();
+    CDC_writePointer += 3;
+    CDC_flush();
        /*
      * PWM registers configuration CH552
      * Fosc = 24000000 Hz
@@ -82,4 +112,19 @@ void irsSetup(void) {
     ET0 = 1;            /* Enable timer0 interrupt */
     TMOD = 0x1;   /* Run in time mode not counting */ 
     T2MOD =0b00010000; /* Divide the system clock by 4 */
+}
+
+unsigned char irsService(void)
+{
+    if (irS.TXsamples == 0) {
+        irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
+        TxBuffCtr = 0;
+    }
+    
+    WaitInReady();
+
+    //if (irS.TXsamples > 0) {
+    //}
+
+    return 0;
 }
