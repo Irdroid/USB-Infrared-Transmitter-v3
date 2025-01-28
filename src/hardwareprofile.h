@@ -1,0 +1,7 @@
+#ifndef HARDWARE_PROFILE_H
+#define HARDWARE_PROFILE_H
+
+#define FIRMWARE_VERSION_H '2'
+#define FIRMWARE_VERSION_L '5'
+
+#endif

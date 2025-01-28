@@ -1,0 +1,85 @@
+// ===================================================================================
+// Project:   Irdroid USB Infrared Transceiver for CH551, CH552, CH554
+// Version:   v1.0
+// Year:      2025
+// Author:    Georgi Bakalski
+// Github:    https://github.com/irdroid
+// License:   http://creativecommons.org/licenses/by-sa/3.0/
+// File:      irs.c Samling routines
+// ===================================================================================
+#include "src/irs.h"
+/** The CDC EP2 read pointer */
+extern volatile __bit CDC_EP2_readPointer;
+/** The CDC EP2 write pointer */
+extern volatile __xdata uint8_t CDC_writePointer;
+
+/** References to the CDC in and out buffers */
+uint8_t * cdc_Out_Buffer = (uint8_t *) EP2_buffer; 
+uint8_t * cdc_In_Buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
+
+/** @brief A Structure, holdingextern uint8_t  Irdroid USB Infrared Transceiver IRs data */
+static struct {
+    unsigned char RXsamples;
+    unsigned char TXsamples;
+    unsigned char timeout;
+    unsigned char TX : 1;
+    unsigned char rxflag1 : 1;
+    unsigned char rxflag2 : 1;
+    unsigned char txflag : 1;
+    unsigned char flushflag : 1;
+    unsigned char overflow : 1;
+    unsigned char TXInvert : 1;
+    unsigned char handshake : 1;
+    unsigned char sendcount : 1;
+    unsigned char sendfinish : 1;
+    unsigned char RXcompleted : 1;
+	unsigned char txerror : 1;
+} irS;
+
+/** @brief Timer0 Interrupt routine */
+void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
+{ 
+    TH0 = 0;     
+    TL0 = 1;      
+}
+// ============================================================================
+// Function Definitions
+// ============================================================================
+
+/** @brief Align the irtoy time to the ch552 time unit */
+static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *buf){
+    register uint16_t time_val = ((timer_h << 8) | timer_l);
+    time_val = time_val*TIMER_0_CONST;
+    *buf++ = (time_val >> 8) & 0xff;
+    *buf = time_val;
+}
+
+void GetUsbIrdroidVersion(void) {
+        cdc_In_Buffer[0] = 'V'; //answer OK
+        cdc_In_Buffer[1] = '2';
+        cdc_In_Buffer[2] = '2';
+        cdc_In_Buffer[3] = '5';
+        WaitInReady();
+        CDC_writePointer += sizeof(uint32_t); // Increment the write counter
+        CDC_flush(); // flush the buffer 
+}
+
+void irsSetup(void) {
+       /*
+     * PWM registers configuration CH552
+     * Fosc = 24000000 Hz
+     * Fpwm = 37.538 Hz (Requested : 38000 Hz)
+     * Duty Cycle = 50 %
+     */
+    //PWM_set_freq(14000);                    
+    PWM_CK_SE = 5;
+    PIN_output(PIN_PWM); 
+    // Setup the PWM Duty cycle to 50%
+    PWM_write(PIN_PWM, PWM_DUTY_50);  
+    
+    // Setup Timer0 & enable the interrupts
+    EA  = 1;            /* Enable global interrupt */
+    ET0 = 1;            /* Enable timer0 interrupt */
+    TMOD = 0x1;   /* Run in time mode not counting */ 
+    T2MOD =0b00010000; /* Divide the system clock by 4 */
+}
