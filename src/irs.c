@@ -8,16 +8,24 @@
 // File:      irs.c Samling routines
 // ===================================================================================
 #include "src/irs.h"
+#include "src/oled_term.h"                // for OLED
+#include "stdio.h"
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;
 /** The CDC EP2 write pointer */
 extern volatile __xdata uint8_t CDC_writePointer;
 
 /** References to the CDC in and out buffers */
-uint8_t * cdc_Out_Buffer = (uint8_t *) EP2_buffer; 
-uint8_t * cdc_In_Buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
+uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
+uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
+
+uint8_t *OutPtr;
+
+__xdata uint8_t buff[20];
+
 
 static unsigned char TxBuffCtr;
+static unsigned char h, l, tmr0_buf[3];
 __xdata struct _irtoy irToy;
 
 #define IRS_TRANSMIT_HI	0
@@ -42,11 +50,50 @@ static struct {
 	unsigned char txerror : 1;
 } irS;
 
-/** @brief Timer0 Interrupt routine */
-void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
+/** @brief Timer0 Interrupt callback routine */
+void timer0_int_callback(void)   
 { 
-    TH0 = 0;     
-    TL0 = 1;      
+       
+    TR0 = 0; // Disable the timer
+    TF0 = 0;
+      
+      if (irS.TX == 1) {//timer0 interrupt means the IR transmit period is over
+            ET0 = 0; // Disable Timer 0 interrupt
+
+			//in transmit mode, but no new data is available
+            if (irS.txflag == 0) { 
+
+				if(tmr0_buf[2]==0x00) irS.txerror=1; //if not end flag, raise buffer underrun error
+
+                //disable the PWM, output ground
+                PWMoff();
+                LedOff();
+                irS.TX = 0;
+    
+                return;
+            }
+
+            if (irS.TXInvert == IRS_TRANSMIT_HI) {
+                //enable the PWM
+                PWMon();
+                irS.TXInvert = IRS_TRANSMIT_LO;
+            } else {
+                //disable the PWM, output ground
+                PWMoff();
+                irS.TXInvert = IRS_TRANSMIT_HI;
+            }
+
+             //setup timer
+            TH0 = tmr0_buf[1]; //first set the high byte
+            TL0 = tmr0_buf[0]; //set low byte copies high byte too
+            
+            TF0 = 0; // Clear the interrupt flag of timer 0
+            ET0 = 1; // Enable Timer 0 interrupt
+            TR0 = 1; // Enable the timer
+            irS.txflag = 0; //buffer ready for new byte
+
+        }
+      
 }
 // ============================================================================
 // Function Definitions
@@ -60,28 +107,33 @@ static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *
     *buf = time_val;
 }
 
-uint8_t getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
+unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
     
+    WaitOutReady();
     if(CDC_available()){
         
         if(len > CDC_readByteCount){
             len = CDC_readByteCount;
+            //sprintf(buff, "Len Count %d\n", len);
+            //OLED_print(buff);
         }
-        
-        for (CDC_readByteCount; CDC_readByteCount < len; CDC_readByteCount++){
-             buffer[len] = cdc_Out_Buffer[CDC_readByteCount];
+        //sprintf(buff, "Byte Count %d\n", CDC_readByteCount);OLED_print(buff);
+        for (int i=0; i < len; i++){
+            //OLED_write(cdc_Out_buffer[mi]);
+             buffer[i] = CDC_read_b();
         }
                
 
     }
-    return CDC_readByteCount;
+    
+    return len;
 }
 
 void GetUsbIrdroidVersion(void) {
-        cdc_In_Buffer[0] = 'V'; //answer OK
-        cdc_In_Buffer[1] = '2';
-        cdc_In_Buffer[2] = '2';
-        cdc_In_Buffer[3] = '5';
+        cdc_In_buffer[0] = 'V'; //answer OK
+        cdc_In_buffer[1] = '2';
+        cdc_In_buffer[2] = '2';
+        cdc_In_buffer[3] = '5';
         WaitInReady();
         CDC_writePointer += sizeof(uint32_t); // Increment the write counter
         CDC_flush(); // flush the buffer 
@@ -89,9 +141,9 @@ void GetUsbIrdroidVersion(void) {
 
 void irsSetup(void) {
      
-    cdc_In_Buffer[0] = 'S'; //answer that we are in sampling mode
-    cdc_In_Buffer[1] = '0';
-    cdc_In_Buffer[2] = '1';
+    cdc_In_buffer[0] = 'S'; //answer that we are in sampling mode
+    cdc_In_buffer[1] = '0';
+    cdc_In_buffer[2] = '1';
     WaitInReady();
     CDC_writePointer += 3;
     CDC_flush();
@@ -109,22 +161,228 @@ void irsSetup(void) {
     
     // Setup Timer0 & enable the interrupts
     EA  = 1;            /* Enable global interrupt */
-    ET0 = 1;            /* Enable timer0 interrupt */
+    ET0 = 0;            /* Enable timer0 interrupt */
     TMOD = 0x1;   /* Run in time mode not counting */ 
     T2MOD =0b00010000; /* Divide the system clock by 4 */
+
+     //setup for IR RX
+    irS.rxflag1 = 0;
+    irS.rxflag2 = 0;
+    irS.txflag = 0;
+    irS.flushflag = 0;
+    irS.timeout = 0;
+    irS.RXsamples = 0;
+    irS.TXsamples = 0;
+    irS.TX = 0;
+    irS.overflow = 0;
+    irS.sendcount = 0;
+    irS.sendfinish = 0;
+    irS.handshake = 0;
+    irS.RXcompleted = 0;
 }
 
 unsigned char irsService(void)
-{
+{   
+    static _smio irIOstate = I_IDLE;
+    static unsigned int txcnt;
+    static unsigned char i;
+    irS.handshake = 1;
+
     if (irS.TXsamples == 0) {
         irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
+        //sprintf(buff, "TX Samples %d\n", irS.TXsamples);OLED_print(buff);
         TxBuffCtr = 0;
     }
     
     WaitInReady();
 
-    //if (irS.TXsamples > 0) {
-    //}
+    if (irS.TXsamples > 0) {
+        
+        switch (irIOstate) {
+            
+            case I_IDLE:
+                    
+                switch (irToy.s[TxBuffCtr]) {
+                   
+                    case IRIO_TRANSMIT_unit: //start transmitting
+                        
+                        sprintf(buff, "Transmit mode %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        txcnt = 0; //reset transmit byte counter, used for diagnostic
+                        ET0 = 0; // Disable Timer 0 interrupt
+                        TR0 = 0; //enable the timer
+                        irS.TX = 0;
+                        
+                        irS.txflag = 0; //transmit flag =0 reset the transmit flag
+                        irIOstate = I_TX_STATE; //change to transmit data processing state
+						tmr0_buf[2]=0x00; //last data packet flag
+						irS.txerror=0; //reset error message
+                        irS.handshake = 1;
+                        
+                        LedOff();
+                          if (irS.handshake) {
+                                WaitInReady();
+                                cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
+                                CDC_writePointer += sizeof(uint8_t); // Increment the write counter
+                                CDC_flush(); // flush the buffer 
+                            }      
+
+                        do {
+                    
+                            OutPtr = cdc_Out_buffer;
+                           
+                            
+                            WaitOutReady();
+                            irS.TXsamples = getCDC_Out_ArmNext();
+                            if (irS.TXsamples) { // host may have sent a ZLP skip transmit if so.
+
+                                //sprintf(buff, "TX Samples %d\n", irS.TXsamples);OLED_print(buff);
+                                for (i = 0; i < irS.TXsamples; i += 2, OutPtr += 2) {
+
+                                    // JTR 3 The idea here is to preprocess the "OVERHEAD"
+                                    // In what is otherwise dead time. I.E. waiting for the
+                                    // IR Tx Timer to timeout.
+                                    //check here for 0xff 0xff and return to IDLE state
+                                    
+                                   
+                                    if (((*(OutPtr) == 0xff) && (*(OutPtr + 1)) == 0xff)) {
+										tmr0_buf[2]=0xff; //flag end of data
+                                        irIOstate = I_LAST_PACKET;
+                                        i = irS.TXsamples;
+                                        *(OutPtr + 1) = 0; // JTR3 replace 0xFFFF with 0020 (Ian's value)
+                                        *(OutPtr) = 20;
+
+                                    }
+                                    align_irtoy_ch552(*OutPtr, *(OutPtr+1), OutPtr);
+                                
+
+                                    // This cute code calculates the two's compliment (subtract from zero)
+                                    // The quick way to do this in invert and add 1.
+                                   
+                                    *OutPtr = ~*OutPtr;
+                                    *(OutPtr + 1) = ~*(OutPtr + 1);
+
+                                    *(OutPtr + 1) += 1;
+                                    if (*(OutPtr + 1) == 0) // did we get rollover in LSB?
+                                        *(OutPtr) += 1; // then must add the carry to MSB
+
+                                    while (irS.txflag == 1);
+                                   
+                                    tmr0_buf[1] = *(OutPtr); //put the second byte in the buffer
+                                    tmr0_buf[0] = *(OutPtr + 1); //put the first byte in the buffer
+                                    
+                                    txcnt += 2; //total bytes transmitted
+                                    // Decrement the number of bytes read
+                                    CDC_readByteCount -= 2;
+
+                                    if(CDC_readByteCount == 0){
+                                    
+                                    UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
+                                    
+                                    if (irS.handshake) {
+                                        WaitInReady();
+                                        cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
+                                        CDC_writePointer += sizeof(uint8_t); // Increment the write counter
+                                        CDC_flush(); // flush the buffer 
+                                    }      
+            
+                                    }
+
+                                    if (irS.TX == 0) {//enable interrupt if this is the first time
+
+                                        irS.TX = 1;
+                                        TH0 = tmr0_buf[1]; //first set the high byte
+                                        TL0 = tmr0_buf[0]; //set low byte copies high byte too
+                                       
+                                        TF0 = 0; // Clear the interrupt flag of timer 0
+                                        ET0 = 1; // Enable Timer 0 interrupt
+                                        TR0 = 1; //enable the timer
+                                        //enable the PWM
+                                        PWMon();
+                                        irS.TXInvert = IRS_TRANSMIT_LO;
+                                        LedOn();
+                                    }else{
+										//only set AFTER 1st packet or the first packet is sent twice
+                                    	irS.txflag = 1; //reset the interrupt buffer full flag
+									}
+
+                                    if (irIOstate == I_LAST_PACKET)
+                                        break;
+                                }//for
+                            }
+                        } while (irIOstate != I_LAST_PACKET);
+
+                        // JTR3 all done! 
+
+                        irIOstate = I_IDLE;
+                        
+                        if (irS.sendcount) { //return the total number of bytes transmitted if required
+                            WaitInReady();
+                            cdc_In_buffer[0] = 't';
+                            cdc_In_buffer[1] = (txcnt >> 8)&0xff;
+                            cdc_In_buffer[2] = (txcnt & 0xff);
+                            CDC_writePointer += 3;
+                            CDC_flush(); // flush the buffer 
+                        }
+                        while (irS.txflag == 1);
+                        LedOff();
+                        if (irS.sendfinish) { // Really redundant giving we can send a count above.
+                            WaitInReady();
+                            cdc_In_buffer[0] = 'C';
+							if(irS.txerror) cdc_In_buffer[0] = 'F';
+                            CDC_writePointer += 1;
+                            CDC_flush(); // flush the buffer 
+
+                        }
+                        irS.TXsamples = 1; //will be zeroed at end, super hack yuck!  //JTR3 super yuck!
+                        break;
+                    
+                    case IRIO_RESET: //reset, return to RC5 (same as SUMP)
+                        LedOff();
+                        sprintf(buff, "IR Reset %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        return 1; //need to flag exit!
+                        break;
+
+                    case IRIO_FREQ:
+                        break;
+                    case IRIO_LEDMUTEON:
+                        break;
+                    case IRIO_LEDMUTEOFF:
+                        break;
+                    case IRIO_LEDON:
+                        LedOn();
+                        break;
+                    case IRIO_LEDOFF:
+                        LedOff();
+                        break;
+                    case IRIO_HANDSHAKE:
+                        sprintf(buff, "HANDSHAKE %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        irS.handshake = 1;
+                        break;
+                    case IRIO_NOTIFYONCOMPLETE:
+                        sprintf(buff, "NOTIFY COMPLETE %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        irS.sendfinish = 1;
+                        break;
+                    case IRIO_GETCNT:
+                        WaitInReady();
+                        cdc_In_buffer[0] = 't';
+                        cdc_In_buffer[1] = (txcnt >> 8)&0xff;
+                        cdc_In_buffer[2] = (txcnt & 0xff);
+                        CDC_writePointer += 3;
+                        CDC_flush(); // flush the buffer 
+                        break;
+                    case IRIO_RETURNTXCNT:
+                        irS.sendcount = 1;
+                        break;
+                        // JTR3 End of new commands
+                    default:
+                        break;
+                }
+                irS.TXsamples--;
+                TxBuffCtr++;
+            break;
+        }   
+    
+    }
 
     return 0;
 }

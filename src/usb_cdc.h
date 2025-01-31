@@ -37,7 +37,8 @@ extern volatile __bit CDC_writeBusyFlag;     // flag of whether upload pointer i
 void WaitInReady(void);            // Wait for IN to become available
 void WaitOutReady(void);            // Wait for OUT to become available
 void CDC_flush(void);             // flush OUT buffer
-char CDC_read(void);              // read single character from IN buffer
+void CDC_read(void);              // read single character from IN buffer
+char CDC_read_b(void);
 void CDC_write(char c);           // write single character to OUT buffer
 void CDC_print(char* str);        // write string to OUT buffer
 void CDC_println(char* str);      // write string with newline to OUT buffer and flush
@@ -65,6 +66,7 @@ typedef struct _CDC_LINE_CODING_TYPE {
   uint8_t  parity;                // parity (0:none,1:odd,2:even,3:mark,4:space)
   uint8_t  databits;              // number of data bits (5,6,7,8 or 16)
 } CDC_LINE_CODING_TYPE, *PCDC_LINE_CODING_TYPE;
-
+/** @brief Get the number of bytes we received from the host */
+uint8_t getCDC_Out_ArmNext(void);
 extern __xdata CDC_LINE_CODING_TYPE CDC_lineCoding;
 #define CDC_getBAUD()   (CDC_lineCoding.baudrate)

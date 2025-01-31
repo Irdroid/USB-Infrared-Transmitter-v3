@@ -39,15 +39,24 @@
 #include "src/gpio.h"                     // for GPIO
 #include "src/delay.h"                    // for delays
 #include "src/usb_cdc.h"                  // for USB-CDC serial
+#include "src/oled_term.h"                // for OLED
 #include "src/irs.h"                      // IR sampling routines
 #include "src/hardwareprofile.h"          // Hardware profile
 #include "usb_cdc.h"
+
 
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
   USB_interrupt();
 }
+
+/** @brief Timer0 Interrupt routine */
+void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
+{ 
+  timer0_int_callback(); 
+}
+
 
 static enum _mode {
     IR_MAIN = 0,
@@ -68,8 +77,8 @@ void main(void) {
   CLK_config();                           // configure system clock
   DLY_ms(5);                              // wait for clock to stabilize
   CDC_init();                             // init USB CDC
+  OLED_init();    
   SetUpDefaultMainMode();                 // Setup default main mode
-
 /*  
   // Take into consideration the differences for minimal time unit between Irdroid and CH552 timers
   align_irtoy_ch552(buf[0], buf[1], buf);
@@ -102,7 +111,7 @@ void main(void) {
         
         if(CDC_available()) {                 // something coming in?
         
-        char byte = CDC_read();                // read the character ...
+        char byte = CDC_read_b();                // read the character ...
         
         switch (byte)
         {
@@ -116,6 +125,8 @@ void main(void) {
             case 'v':// Acquire Version
                 GetUsbIrdroidVersion();
                 break;
+            case 0x00:
+              break;
             default:
               break;         
         }

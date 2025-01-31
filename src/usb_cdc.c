@@ -3,7 +3,7 @@
 // ===================================================================================
 
 #include "usb_cdc.h"
-
+#include "src/oled_term.h"                // for OLED
 // ===================================================================================
 // Variables and Defines
 // ===================================================================================
@@ -48,7 +48,12 @@ void WaitInReady(void){
 }
 
 void WaitOutReady(void){
-   while(!CDC_available()); // Wait for data from the host
+   while(!CDC_available());
+}
+
+uint8_t getCDC_Out_ArmNext(void){
+  while(!CDC_readByteCount);  
+  return CDC_readByteCount;
 }
 
 // Write single character to OUT buffer
@@ -71,7 +76,19 @@ void CDC_println(char* str) {
 }
 
 // Read single character from IN buffer
-char CDC_read(void) {
+void CDC_read(void) {
+  //char data;
+  while(!CDC_readByteCount){
+    // OLED_write('s');
+  }                      // wait for data
+  //data = EP2_buffer[CDC_readPointer++];           // get character
+  if(CDC_readByteCount == 0)                    // dec number of bytes in buffer
+    UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)
+              | UEP_R_RES_ACK;                    // request new data if empty
+  //return data;
+}
+// Read single character from IN buffer
+char CDC_read_b(void) {
   char data;
   while(!CDC_readByteCount);                      // wait for data
   data = EP2_buffer[CDC_readPointer++];           // get character

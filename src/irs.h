@@ -51,6 +51,16 @@
 #define IRIO_IRW_FREQ           0x43
 #define CDC_DESC                0x22
 
+typedef enum { //in out data state machine
+    I_IDLE = 0,
+    I_PARAMETERS,
+    I_PROCESS,
+    I_DATA_L,
+    I_DATA_H,
+    I_TX_STATE,
+    I_LAST_PACKET //JTR3 New! For 0x07 command
+} _smio;
+
 // ============================================================================
 // Function Declarations
 // ============================================================================
@@ -60,5 +70,7 @@ void GetUsbIrdroidVersion(void);
 void irsSetup(void);
 /** @brief Ir service routine */
 unsigned char irsService(void);
-uint8_t getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len);
+unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len);
+/** @brief Timer0 Interrupt callback routine */
+void timer0_int_callback(void);  
 #endif
