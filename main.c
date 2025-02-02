@@ -57,7 +57,6 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
   timer0_int_callback(); 
 }
 
-
 static enum _mode {
     IR_MAIN = 0,
     IR_SUMP, //SUMP logic analyzer
@@ -76,63 +75,42 @@ void main(void) {
   // Setup
   CLK_config();                           // configure system clock
   DLY_ms(5);                              // wait for clock to stabilize
-  CDC_init();                             // init USB CDC
-  OLED_init();    
+  CDC_init();                             // init the USB CDC
+  OLED_init();                            // Init the oled display/debugging    
   SetUpDefaultMainMode();                 // Setup default main mode
-/*  
-  // Take into consideration the differences for minimal time unit between Irdroid and CH552 timers
-  align_irtoy_ch552(buf[0], buf[1], buf);
-
-  uint8_t *OutPtr = buf;
-  
-  *OutPtr = ~*OutPtr;
-  *(OutPtr + 1) = ~*(OutPtr + 1);
-
-  *(OutPtr + 1) += 1;
-  if (*(OutPtr + 1) == 0) // did we get rollover in LSB?
-  *(OutPtr) += 1; // then must add the carry to MSB
-
-  TH0 = buf[0];     
-  TL0 = buf[1];
-
-  TR0 = 1;             Start timer0 */
-
-  // Loop
+  // Main loop
   while(1) {
     
     switch (mode)
     {
-
       case IR_S:
         if (irsService() != 0) SetUpDefaultMainMode();
         break;
       
       default:
-        
-        if(CDC_available()) {                 // something coming in?
-        
-        char byte = CDC_read_b();                // read the character ...
-        
-        switch (byte)
-        {
+        if(CDC_available()) {       // something coming in?
+          
+          char byte = CDC_read_b(); // read the character ...  
+          
+          switch (byte)
+          {
 
-            case 'S': //IRIO Sampling Mode
-            case 's':
-                mode = IR_S;
-                irsSetup();
+              case 'S': //IRIO Sampling Mode
+              case 's': 
+                  mode = IR_S;
+                  irsSetup();
+                  break;
+              case 'V':
+              case 'v':// Acquire Version
+                  GetUsbIrdroidVersion();
+                  break;
+              case 0x00:
                 break;
-            case 'V':
-            case 'v':// Acquire Version
-                GetUsbIrdroidVersion();
-                break;
-            case 0x00:
-              break;
-            default:
-              break;         
+              default:
+                break;         
         }
-      break;
+        break;
       }
-    }
-      
-    }
+    }    
+  }
 }

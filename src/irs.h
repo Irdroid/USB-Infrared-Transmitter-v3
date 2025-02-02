@@ -4,12 +4,10 @@
 // Libraries, Definitions and Macros
 // ============================================================================
 #include "src/usb_cdc.h"                  // for USB-CDC serial
-#include "src/pwm.h"
-#include "src/gpio.h"
-#include "src/hardwareprofile.h"
+#include "src/pwm.h"                      // for PWM Code
+#include "src/gpio.h"                     // for GPIO
+#include "src/hardwareprofile.h"          // Definitions hw specific
 
-#define KB_PLUS 43
-#define KB_MINUS 45
 /** Constant that we use to multiply the values coming from th USB host to 
  * match the irtoy time unit*/
 #define TIMER_0_CONST 128
@@ -33,14 +31,11 @@
 #define IRIO_LEDMUTEOFF         0x11
 #define IRIO_LEDON 		        0x12
 #define IRIO_LEDOFF             0x13
-
 #define IRIO_DESCRIPTOR         0x23
 #define IRIO_RETURNTXCNT        0x24
 #define IRIO_NOTIFYONCOMPLETE   0X25
 #define IRIO_HANDSHAKE          0x26
-
 #define IRIO_TRANSMIT_unit      0x03
-
 #define IRIO_IO_WRITE           0x30
 #define IRIO_IO_DIR		        0x31
 #define IRIO_IO_READ            0x32
@@ -64,13 +59,25 @@ typedef enum { //in out data state machine
 // ============================================================================
 // Function Declarations
 // ============================================================================
+
 /** @brief Send the USB Infrared Tranceiver version information to the host */
 void GetUsbIrdroidVersion(void);
+
 /** @brief Setup for IR sampling mode; Timer, PWM etc. */
 void irsSetup(void);
+
 /** @brief Ir service routine */
 unsigned char irsService(void);
+
+/** @brief Copy the data from the CDC Out buffer to another buffer in 
+ * the memory
+ * 
+ * @param[in] len - The number of bytes to copy
+ * @param[out] buffer - Reference to the buffer to store the data
+ * @return the number of bytes copied to the buffer
+ */
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len);
+
 /** @brief Timer0 Interrupt callback routine */
 void timer0_int_callback(void);  
 #endif

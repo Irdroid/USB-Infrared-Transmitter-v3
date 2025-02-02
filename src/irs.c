@@ -8,8 +8,9 @@
 // File:      irs.c Samling routines
 // ===================================================================================
 #include "src/irs.h"
-#include "src/oled_term.h"                // for OLED
+#include "src/oled_term.h" // for OLED Debug
 #include "stdio.h"
+
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;
 /** The CDC EP2 write pointer */
@@ -19,19 +20,18 @@ extern volatile __xdata uint8_t CDC_writePointer;
 uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
 uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
 
-uint8_t *OutPtr;
+uint8_t *OutPtr; // Same naming of this pointer as in the irtoy code
 
-__xdata uint8_t buff[20];
+__xdata uint8_t buff[20]; // This is used for debugging on the OLED screen
 
-
-static unsigned char TxBuffCtr;
-static unsigned char h, l, tmr0_buf[3];
-__xdata struct _irtoy irToy;
+static unsigned char TxBuffCtr; // Transmit buffer counter
+static unsigned char h, l, tmr0_buf[3]; // Timer0 buffer
+__xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
 
 #define IRS_TRANSMIT_HI	0
 #define IRS_TRANSMIT_LO	1
 
-/** @brief A Structure, holdingextern uint8_t  Irdroid USB Infrared Transceiver IRs data */
+/** @brief A Structure, holding the Irdroid USB Infrared Transceiver IRs data */
 static struct {
     unsigned char RXsamples;
     unsigned char TXsamples;
@@ -53,9 +53,8 @@ static struct {
 /** @brief Timer0 Interrupt callback routine */
 void timer0_int_callback(void)   
 { 
-       
     TR0 = 0; // Disable the timer
-    TF0 = 0;
+    TF0 = 0; // Clear Timer0 interrupt flag
       
       if (irS.TX == 1) {//timer0 interrupt means the IR transmit period is over
             ET0 = 0; // Disable Timer 0 interrupt
@@ -64,12 +63,10 @@ void timer0_int_callback(void)
             if (irS.txflag == 0) { 
 
 				if(tmr0_buf[2]==0x00) irS.txerror=1; //if not end flag, raise buffer underrun error
-
                 //disable the PWM, output ground
                 PWMoff();
                 LedOff();
                 irS.TX = 0;
-    
                 return;
             }
 
@@ -82,24 +79,31 @@ void timer0_int_callback(void)
                 PWMoff();
                 irS.TXInvert = IRS_TRANSMIT_HI;
             }
-
              //setup timer
             TH0 = tmr0_buf[1]; //first set the high byte
             TL0 = tmr0_buf[0]; //set low byte copies high byte too
-            
+    
             TF0 = 0; // Clear the interrupt flag of timer 0
             ET0 = 1; // Enable Timer 0 interrupt
             TR0 = 1; // Enable the timer
             irS.txflag = 0; //buffer ready for new byte
 
-        }
-      
+        }  
 }
 // ============================================================================
 // Function Definitions
 // ============================================================================
 
-/** @brief Align the irtoy time to the ch552 time unit */
+/** @brief Align the irtoy time to the ch552 time unit 
+ * The irtoy time unit is with resolution of 21.333us and
+ * the CH55x timer0 is configured for 167ns thus to be compatible
+ * with the existing Irtoy/Irdroid Driver on the host side, we need 
+ * to align that. This function should perform as fast as possible
+ * 
+ * @param[in] timer_h - The high byte in the buffer,comming from the host
+ * @param[in] timer_l - The low bytes in the buffer, comming from the host
+ * @param[out] buf - The buffer in which we are storing the result
+*/
 static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *buf){
     register uint16_t time_val = ((timer_h << 8) | timer_l);
     time_val = time_val*TIMER_0_CONST;
@@ -110,22 +114,16 @@ static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
     
     WaitOutReady();
-    if(CDC_available()){
-        
-        if(len > CDC_readByteCount){
+    if(CDC_available())
+    {    
+        if(len > CDC_readByteCount)
+        {
             len = CDC_readByteCount;
-            //sprintf(buff, "Len Count %d\n", len);
-            //OLED_print(buff);
         }
-        //sprintf(buff, "Byte Count %d\n", CDC_readByteCount);OLED_print(buff);
         for (int i=0; i < len; i++){
-            //OLED_write(cdc_Out_buffer[mi]);
              buffer[i] = CDC_read_b();
         }
-               
-
     }
-    
     return len;
 }
 
@@ -141,13 +139,14 @@ void GetUsbIrdroidVersion(void) {
 
 void irsSetup(void) {
      
-    cdc_In_buffer[0] = 'S'; //answer that we are in sampling mode
+    cdc_In_buffer[0] = 'S'; //answer to the host that we are in sampling mode
     cdc_In_buffer[1] = '0';
     cdc_In_buffer[2] = '1';
     WaitInReady();
     CDC_writePointer += 3;
     CDC_flush();
-       /*
+    
+    /*
      * PWM registers configuration CH552
      * Fosc = 24000000 Hz
      * Fpwm = 37.538 Hz (Requested : 38000 Hz)
@@ -158,7 +157,7 @@ void irsSetup(void) {
     PIN_output(PIN_PWM); 
     // Setup the PWM Duty cycle to 50%
     PWM_write(PIN_PWM, PWM_DUTY_50);  
-    
+
     // Setup Timer0 & enable the interrupts
     EA  = 1;            /* Enable global interrupt */
     ET0 = 0;            /* Enable timer0 interrupt */
@@ -190,7 +189,6 @@ unsigned char irsService(void)
 
     if (irS.TXsamples == 0) {
         irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
-        //sprintf(buff, "TX Samples %d\n", irS.TXsamples);OLED_print(buff);
         TxBuffCtr = 0;
     }
     
@@ -217,20 +215,17 @@ unsigned char irsService(void)
 						tmr0_buf[2]=0x00; //last data packet flag
 						irS.txerror=0; //reset error message
                         irS.handshake = 1;
-                        
                         LedOff();
-                          if (irS.handshake) {
-                                WaitInReady();
-                                cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
-                                CDC_writePointer += sizeof(uint8_t); // Increment the write counter
-                                CDC_flush(); // flush the buffer 
-                            }      
+                        
+                        if (irS.handshake) {
+                            WaitInReady();
+                            cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
+                            CDC_writePointer += sizeof(uint8_t); // Increment the write counter
+                            CDC_flush(); // flush the buffer 
+                        }      
 
                         do {
-                    
-                            OutPtr = cdc_Out_buffer;
-                           
-                            
+                            OutPtr = cdc_Out_buffer;    
                             WaitOutReady();
                             irS.TXsamples = getCDC_Out_ArmNext();
                             if (irS.TXsamples) { // host may have sent a ZLP skip transmit if so.
@@ -241,23 +236,20 @@ unsigned char irsService(void)
                                     // JTR 3 The idea here is to preprocess the "OVERHEAD"
                                     // In what is otherwise dead time. I.E. waiting for the
                                     // IR Tx Timer to timeout.
-                                    //check here for 0xff 0xff and return to IDLE state
-                                    
-                                   
+                                    //check here for 0xff 0xff and return to IDLE state        
+
                                     if (((*(OutPtr) == 0xff) && (*(OutPtr + 1)) == 0xff)) {
 										tmr0_buf[2]=0xff; //flag end of data
                                         irIOstate = I_LAST_PACKET;
                                         i = irS.TXsamples;
                                         *(OutPtr + 1) = 0; // JTR3 replace 0xFFFF with 0020 (Ian's value)
                                         *(OutPtr) = 20;
-
                                     }
+
                                     align_irtoy_ch552(*OutPtr, *(OutPtr+1), OutPtr);
-                                
 
                                     // This cute code calculates the two's compliment (subtract from zero)
                                     // The quick way to do this in invert and add 1.
-                                   
                                     *OutPtr = ~*OutPtr;
                                     *(OutPtr + 1) = ~*(OutPtr + 1);
 
@@ -275,16 +267,15 @@ unsigned char irsService(void)
                                     CDC_readByteCount -= 2;
 
                                     if(CDC_readByteCount == 0){
-                                    
-                                    UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
-                                    
-                                    if (irS.handshake) {
-                                        WaitInReady();
-                                        cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
-                                        CDC_writePointer += sizeof(uint8_t); // Increment the write counter
-                                        CDC_flush(); // flush the buffer 
-                                    }      
-            
+                                        // Ask for more bytes
+                                        UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
+                                        // Ask the host to send us 62 bytes
+                                        if (irS.handshake) {
+                                            WaitInReady();
+                                            cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
+                                            CDC_writePointer += sizeof(uint8_t); // Increment the write counter
+                                            CDC_flush(); // flush the buffer 
+                                        }                  
                                     }
 
                                     if (irS.TX == 0) {//enable interrupt if this is the first time
