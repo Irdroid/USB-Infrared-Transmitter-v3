@@ -9,8 +9,7 @@
 // ===================================================================================
 #include "src/irs.h"
 #include "src/oled_term.h" // for OLED Debug
-#include "stdio.h"
-
+#include "common.h"
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;
 /** The CDC EP2 write pointer */
@@ -21,8 +20,6 @@ uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer;
 uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
 
 uint8_t *OutPtr; // Same naming of this pointer as in the irtoy code
-
-__xdata uint8_t buff[20]; // This is used for debugging on the OLED screen
 
 static unsigned char TxBuffCtr; // Transmit buffer counter
 static unsigned char h, l, tmr0_buf[3]; // Timer0 buffer
@@ -204,7 +201,7 @@ unsigned char irsService(void)
                    
                     case IRIO_TRANSMIT_unit: //start transmitting
                         
-                        sprintf(buff, "Transmit mode %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        DBG("Transmit mode %x\n", irToy.s[TxBuffCtr]);
                         txcnt = 0; //reset transmit byte counter, used for diagnostic
                         ET0 = 0; // Disable Timer 0 interrupt
                         TR0 = 0; //enable the timer
@@ -230,7 +227,7 @@ unsigned char irsService(void)
                             irS.TXsamples = getCDC_Out_ArmNext();
                             if (irS.TXsamples) { // host may have sent a ZLP skip transmit if so.
 
-                                //sprintf(buff, "TX Samples %d\n", irS.TXsamples);OLED_print(buff);
+                                DBG("TX Samples %d\n", irS.TXsamples)
                                 for (i = 0; i < irS.TXsamples; i += 2, OutPtr += 2) {
 
                                     // JTR 3 The idea here is to preprocess the "OVERHEAD"
@@ -329,7 +326,7 @@ unsigned char irsService(void)
                     
                     case IRIO_RESET: //reset, return to RC5 (same as SUMP)
                         LedOff();
-                        sprintf(buff, "IR Reset %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        DBG("IR Reset %x\n", irToy.s[TxBuffCtr]);
                         return 1; //need to flag exit!
                         break;
 
@@ -346,11 +343,11 @@ unsigned char irsService(void)
                         LedOff();
                         break;
                     case IRIO_HANDSHAKE:
-                        sprintf(buff, "HANDSHAKE %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        DBG("HANDSHAKE %x\n", irToy.s[TxBuffCtr]);
                         irS.handshake = 1;
                         break;
                     case IRIO_NOTIFYONCOMPLETE:
-                        sprintf(buff, "NOTIFY COMPLETE %x\n", irToy.s[TxBuffCtr]);OLED_print(buff);
+                        DBG("NOTIFY COMPLETE %x\n", irToy.s[TxBuffCtr]);
                         irS.sendfinish = 1;
                         break;
                     case IRIO_GETCNT:
