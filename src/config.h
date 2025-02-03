@@ -4,8 +4,6 @@
 
 #pragma once
 
-#define DEBUG
-
 // Pin definitions
 #define PIN_BUZZER          P15       // buzzer pin
 #define PIN_SDA             P16       // I2C SDA

@@ -8,7 +8,9 @@
 // File:      irs.c Samling routines
 // ===================================================================================
 #include "src/irs.h"
+#ifdef DEBUG
 #include "src/oled_term.h" // for OLED Debug
+#endif
 #include "common.h"
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;

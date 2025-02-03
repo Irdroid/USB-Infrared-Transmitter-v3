@@ -76,7 +76,11 @@ void main(void) {
   CLK_config();                           // configure system clock
   DLY_ms(5);                              // wait for clock to stabilize
   CDC_init();                             // init the USB CDC
-  OLED_init();                            // Init the oled display/debugging    
+
+  #ifdef DEBUG
+    OLED_init();                            // Init the oled display/debugging  
+  #endif  
+  
   SetUpDefaultMainMode();                 // Setup default main mode
   // Main loop
   while(1) {
