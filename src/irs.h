@@ -6,7 +6,7 @@
 #include "src/usb_cdc.h"                  // for USB-CDC serial
 #include "src/pwm.h"                      // for PWM Code
 #include "src/gpio.h"                     // for GPIO
-#include "src/hardwareprofile.h"          // Definitions hw specific
+#include "src/hwprofile.h"          // Definitions hw specific
 
 /** Constant that we use to multiply the values coming from th USB host to 
  * match the irtoy time unit*/

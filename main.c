@@ -41,7 +41,7 @@
 #include "src/usb_cdc.h"                  // for USB-CDC serial
 #include "src/oled_term.h"                // for OLED
 #include "src/irs.h"                      // IR sampling routines
-#include "src/hardwareprofile.h"          // Hardware profile
+#include "src/hwprofile.h"          // Hardware profile
 #include "usb_cdc.h"
 
 
