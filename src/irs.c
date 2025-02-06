@@ -126,7 +126,7 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
 
 void GetUsbIrdroidVersion(void) {
     cdc_In_buffer[0] = 'V'; //answer OK
-    cdc_In_buffer[1] = (irToy.HardwareVersion + 0x30);
+    cdc_In_buffer[1] = HARDWARE_VERSION;
     cdc_In_buffer[2] = FIRMWARE_VERSION_H;
     cdc_In_buffer[3] = FIRMWARE_VERSION_L;
     WaitInReady();
