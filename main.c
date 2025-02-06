@@ -26,9 +26,6 @@
 // - Run 'make flash' immediatly afterwards.
 // - To compile the firmware using the Arduino IDE, follow the instructions in the 
 //   .ino file.
-
-
-
 // ===================================================================================
 // Libraries, Definitions and Macros
 // ===================================================================================
@@ -42,9 +39,13 @@
 #include "src/oled_term.h"                // for OLED
 #include "src/irs.h"                      // IR sampling routines
 #include "src/hwprofile.h"                  // Hardware profile
+#include "src/dataflash.h"
 #include "usb_cdc.h"
+#include "src/common.h"
 
-
+#ifdef DEBUG
+__xdata uint8_t dbg_buff[20];
+#endif
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
@@ -76,11 +77,9 @@ void main(void) {
   CLK_config();                           // configure system clock
   DLY_ms(5);                              // wait for clock to stabilize
   CDC_init();                             // init the USB CDC
-
   #ifdef DEBUG
-    OLED_init();                            // Init the oled display/debugging  
-  #endif  
-  
+  OLED_init();                          // Init the oled display/debugging  
+  #endif
   SetUpDefaultMainMode();                 // Setup default main mode
   // Main loop
   while(1) {
