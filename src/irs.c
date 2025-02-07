@@ -102,7 +102,7 @@ void timer0_int_callback(void)
  * @param[out] buf - The buffer in which we are storing the result
 */
 static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *buf){
-    register uint16_t time_val = ((timer_h << 8) | timer_l);
+    uint_fast16_t time_val = ((timer_h << 8) | timer_l);
     time_val = time_val*TIMER_0_CONST;
     *buf++ = (time_val >> 8) & 0xff;
     *buf = time_val;
@@ -159,8 +159,12 @@ void irsSetup(void) {
     EA  = 1;            /* Enable global interrupt */
     ET0 = 0;            /* Enable timer0 interrupt */
     TMOD = 0x1;   /* Run in time mode not counting */ 
+    /* By default we are running 24MHz system clock and 2MHz timer clock */
+    #ifdef TIMER_CLOCK_FAST
     T2MOD =0b00010000; /* Divide the system clock by 4 */
-
+    #else
+    T2MOD =0b00000000; /* Divide the system clock by 12 */
+    #endif
      //setup for IR RX
     irS.rxflag1 = 0;
     irS.rxflag2 = 0;
@@ -215,7 +219,7 @@ unsigned char irsService(void)
                         LedOff();
                         
                         if (irS.handshake) {
-                            WaitInReady();
+                            //WaitInReady();
                             cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
                             CDC_writePointer += sizeof(uint8_t); // Increment the write counter
                             CDC_flush(); // flush the buffer 

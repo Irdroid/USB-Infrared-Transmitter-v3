@@ -19,7 +19,7 @@ XRAM_LOC   = 0x0100
 XRAM_SIZE  = 0x0300
 CODE_SIZE  = 0x3800
 # Enable or disable debugging
-DBG = 1
+DBG = 0
 
 # Toolchain
 CC         = sdcc

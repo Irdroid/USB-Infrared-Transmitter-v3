@@ -10,7 +10,12 @@
 
 /** Constant that we use to multiply the values coming from th USB host to 
  * match the irtoy time unit*/
-#define TIMER_0_CONST 128
+#ifdef TIMER_CLOCK_FAST
+#define TIMER_0_CONST 128 /* We are using 6MHz timer clock */
+#else
+#define TIMER_0_CONST 46 /* We are using a 2MHz timer clock*/
+#endif
+
 #define PWM_DUTY_50 128 // PWM Duty cycle constant for 50% Duty cycle
 #define LED_PIN P35 // Macro for the LED PIN
 #define PWMon() PWM_start(PIN_PWM); // Macro to turn on the PWM
