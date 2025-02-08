@@ -13,7 +13,7 @@
 #ifdef TIMER_CLOCK_FAST
 #define TIMER_0_CONST 128 /* We are using 6MHz timer clock */
 #else
-#define TIMER_0_CONST 46 /* We are using a 2MHz timer clock*/
+#define TIMER_0_CONST 43 /* We are using a 2MHz timer clock*/
 #endif
 
 #define PWM_DUTY_50 128 // PWM Duty cycle constant for 50% Duty cycle
