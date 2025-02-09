@@ -31,17 +31,56 @@
 // ===================================================================================
 
 // Libraries
-#include "src/config.h"                   // user configurations
+#include "src/irs.h"
 #include "src/system.h"                   // system functions
-#include "src/gpio.h"                     // for GPIO
 #include "src/delay.h"                    // for delays
 #include "src/usb_cdc.h"                  // for USB-CDC serial
-#include "src/oled_term.h"                // for OLED
-#include "src/irs.h"                      // IR sampling routines
-#include "src/hwprofile.h"                  // Hardware profile
-#include "src/dataflash.h"
+#include "ch554.h"
+#include <stdbool.h>
+#include <stdint.h>
 #include "usb_cdc.h"
-#include "src/common.h"
+#include "gpio.h"
+#define PIN_INT P32
+#define PIN_LED P33
+#define MAX_SAMPLES 64
+uint32_t timer_val;
+uint32_t timer_val_bkp;
+/** The CDC EP2 write pointer */
+extern volatile __xdata uint8_t CDC_writePointer;
+
+uint8_t * cdc_In_buffer_main = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
+
+uint8_t rx_samples;
+
+bool rx_c;
+bool rx_b;
+
+void ext0_interrupt(void) __interrupt(INT_NO_INT0)
+{
+    PIN_toggle(PIN_LED);
+    // If timer 0 is not turned on , turn it on
+    if(ET0 == 0){
+      TH0=0;
+      TL0 = 0;
+      ET0 = 1;
+    }else{
+      // Check if the previous value was added to the buffer
+      // if not save the current value in a separate variable which will be 
+      // processed later
+      if(rx_c){
+      timer_val_bkp = (TH0 << 8) | TL0;
+      rx_b = true;
+      }else{  
+      timer_val = (TH0 << 8) | TL0;
+      rx_c = true;
+      }
+      
+      TH0 = 0;
+      TL0 = 0;
+      // increment the number of received samples two bytes timer low and timer_h
+      rx_samples += 2;
+    }  
+}
 
 #ifdef DEBUG
 __xdata uint8_t dbg_buff[20];
@@ -55,7 +94,7 @@ void USB_ISR(void) __interrupt(INT_NO_USB) {
 /** @brief Timer0 Interrupt routine */
 void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
 { 
-  timer0_int_callback(); 
+
 }
 
 static enum _mode {
@@ -81,39 +120,47 @@ void main(void) {
   OLED_init();                          // Init the oled display/debugging  
   #endif
   SetUpDefaultMainMode();                 // Setup default main mode
+  // this is the interupt pin, the ir receiver
+  PIN_output_OD(PIN_INT);  
+  // Output pin used to observe the interrupt 0 pin change
+  PIN_output(PIN_LED);
+  // Setup the timer
+  TMOD = 0x1;   /* Run in time mode not counting */ 
+  /* By default we are running 24MHz system clock and 2MHz timer clock */
+  #ifdef TIMER_CLOCK_FAST
+  T2MOD =0b00010000; /* Divide the system clock by 4 */
+  #else
+  T2MOD =0b00000000; /* Divide the system clock by 12 */
+  #endif
+
+	EA  = 1;     /* Enable global interrupt */
+  EX0 = 1;    // Enable INT0
+  IT0 = 1;    // INT0 is edge triggered
+
   // Main loop
   while(1) {
-    
-    switch (mode)
-    {
-      case IR_S:
-        if (irsService() != 0) SetUpDefaultMainMode();
-        break;
-      
-      default:
-        if(CDC_available()) {       // something coming in?
-          
-          char byte = CDC_read_b(); // read the character ...  
-          
-          switch (byte)
-          {
-
-              case 'S': //IRIO Sampling Mode
-              case 's': 
-                  mode = IR_S;
-                  irsSetup();
-                  break;
-              case 'V':
-              case 'v':// Acquire Version
-                  GetUsbIrdroidVersion();
-                  break;
-              case 0x00:
-                break;
-              default:
-                break;         
-        }
-        break;
-      }
-    }    
+    // If we have timer measuremnts available put them in the CDC buffer
+    if(rx_c){
+      timer_val /= TIMER_0_CONST;
+      *cdc_In_buffer_main++ = (timer_val >> 8) & 0xff;
+      *cdc_In_buffer_main = timer_val;
+      CDC_writePointer += sizeof(uint16_t);
+      rx_c = 0;
+    }
+    // The same as above but used as a backup if we were interrupted before saving the
+    // previous timer values
+    if(rx_b){
+      timer_val /= TIMER_0_CONST;
+      *cdc_In_buffer_main++ = (timer_val_bkp >> 8) & 0xff;
+      *cdc_In_buffer_main = timer_val_bkp;
+      CDC_writePointer += sizeof(uint16_t);
+      rx_b = 0;
+    }
+    // if we have a full buffer, send it to the host
+    if(rx_samples == MAX_SAMPLES){
+      WaitInReady();
+      CDC_flush(); // flush the buffer
+      rx_samples = 0; 
+    }
   }
 }
