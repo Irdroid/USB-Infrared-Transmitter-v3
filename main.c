@@ -43,14 +43,16 @@
 #define PIN_INT P32
 #define PIN_LED P33
 #define MAX_SAMPLES 64
-uint32_t timer_val;
-uint32_t timer_val_bkp;
+uint32_t timer_val1;
+uint32_t timer_val2;
 /** The CDC EP2 write pointer */
 extern volatile __xdata uint8_t CDC_writePointer;
-
+// The CDC In buffer , used to send to the host
 uint8_t * cdc_In_buffer_main = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
 
-uint8_t rx_samples;
+#ifdef DEBUG
+__xdata uint8_t dbg_buff[20];
+#endif
 
 bool rx_c;
 bool rx_b;
@@ -59,32 +61,32 @@ void ext0_interrupt(void) __interrupt(INT_NO_INT0)
 {
     PIN_toggle(PIN_LED);
     // If timer 0 is not turned on , turn it on
-    if(ET0 == 0){
+    if(TR0 == 0){
       TH0=0;
       TL0 = 0;
-      ET0 = 1;
+      TR0 = 1;
     }else{
       // Check if the previous value was added to the buffer
       // if not save the current value in a separate variable which will be 
       // processed later
+      // Turn off timer0
+      TR0=0;
       if(rx_c){
-      timer_val_bkp = (TH0 << 8) | TL0;
+      timer_val1 = (TH0 << 8) & 0xff00;
+      timer_val1 |= TL0;
       rx_b = true;
       }else{  
-      timer_val = (TH0 << 8) | TL0;
+      timer_val2 = (TH0 << 8) & 0xff00;
+      timer_val2 |= TL0;
       rx_c = true;
       }
-      
+      // Zero TH, TL and start the timer 0
       TH0 = 0;
       TL0 = 0;
-      // increment the number of received samples two bytes timer low and timer_h
-      rx_samples += 2;
+      TR0 = 1;
     }  
 }
 
-#ifdef DEBUG
-__xdata uint8_t dbg_buff[20];
-#endif
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
@@ -141,26 +143,22 @@ void main(void) {
   while(1) {
     // If we have timer measuremnts available put them in the CDC buffer
     if(rx_c){
-      timer_val /= TIMER_0_CONST;
-      *cdc_In_buffer_main++ = (timer_val >> 8) & 0xff;
-      *cdc_In_buffer_main = timer_val;
+      timer_val1 /= TIMER_0_CONST;
+      *cdc_In_buffer_main++ = (timer_val1 >> 8) & 0xff;
+      *cdc_In_buffer_main++ = timer_val1;
       CDC_writePointer += sizeof(uint16_t);
+      if(CDC_writePointer == EP2_SIZE) CDC_flush();
       rx_c = 0;
     }
     // The same as above but used as a backup if we were interrupted before saving the
     // previous timer values
     if(rx_b){
-      timer_val /= TIMER_0_CONST;
-      *cdc_In_buffer_main++ = (timer_val_bkp >> 8) & 0xff;
-      *cdc_In_buffer_main = timer_val_bkp;
+      timer_val2 /= TIMER_0_CONST;
+      *cdc_In_buffer_main++ = (timer_val2 >> 8) & 0xff;
+      *cdc_In_buffer_main++ = timer_val2;
       CDC_writePointer += sizeof(uint16_t);
+      if(CDC_writePointer == EP2_SIZE) CDC_flush();
       rx_b = 0;
-    }
-    // if we have a full buffer, send it to the host
-    if(rx_samples == MAX_SAMPLES){
-      WaitInReady();
-      CDC_flush(); // flush the buffer
-      rx_samples = 0; 
     }
   }
 }
