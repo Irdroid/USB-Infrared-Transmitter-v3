@@ -10,7 +10,7 @@
 #define PIN_SCL             P17       // I2C SCL
 #define PIN_PWM             P34       // PWM pin
 // USB device descriptor
-#define USB_VENDOR_ID       0x4d8    // VID Irdroid
+#define USB_VENDOR_ID       0x4d9    // VID Irdroid
 #define USB_PRODUCT_ID      0xf58b    // PID Irdroid
 #define USB_DEVICE_VERSION  0x0300    // v1.0 (BCD-format)
 
