@@ -38,68 +38,94 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "usb_cdc.h"
-#include "gpio.h"
 #include "common.h"
-#define PIN_INT P32
-#define PIN_LED P33
-#define MAX_SAMPLES 64
+#include "oled_term.h"
+// here we save the pulse-space values
+// of the captured IR signal
+__xdata uint8_t dbg_buff[20];
+uint16_t pulse;
+uint16_t space;
+/** The CDC EP2 write pointer */
+extern volatile __xdata uint8_t CDC_writePointer;
+
+uint8_t * cdc_In_buffer_main = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
+
+bool rx_c;
+
+/** Timer0 is configured to automatically start when the INT0 is high
+ *  and TR0=1; In the INT0 ISR, we zero timer0 TH0 and TL0, zero T2H and
+ * T2L and we start timer2 and write TR0 = 1, when INT0 becomes high,
+ * Timer0 is automatically started (via the INT0 gate configuration for
+ * timer0, when we have another INT0 interrupt, we read and save timer0
+ * TH0 and TL0, read and save T2H and T2L. The IR pulse is T2H|T2L - TH0|TL0,
+ * and the ir space is TH0|TL0)
+ * 
+ * The signal from the IR Receiver is active-low.
+ * 
+ * IR Signal(INT0)_______         ______________
+ *                      |        |              |
+ *                      |        |              |
+ *                      | Pulse  |    Space     |
+ *                      |________|              |
+ *                   (T2_ON)  (T0_ON)    (T2_OFF)(T0_OFF)
+ *  
+ *  The width of the pulse and space periods are calculated,
+ *  using the formula below:
+ * 
+ *  Space = (TH0 << 8) | TL0
+ *  Pulse = ((TH2 << 8) | TL2) - Space    
+ */                  
+void ext0_interrupt(void) __interrupt(INT_NO_INT0)
+{
+    // If timer0 and timer2 are not turned on , turn them on
+    // this is the initial condition
+    if(TR0 == 0 && TR2 == 0){
+      // Zero Timer0 and Timer2 high and low regs
+      TH2 = 0;
+      TL2 = 0;
+      TH0=0;
+      TL0 = 0;
+      // Prepare Timer0 to start when INT0 is low
+      TR0 = 1;
+      // Start Timer2
+      TR2 = 1;
+    }else{
+      // Stop timer0
+      TR0 = 0;
+      // Stop timer2
+      TR2 = 0;int8_t rx_samples;
+      // Read Timer0 readings , this is the IR signal space
+      space = (TH0 << 8) | TL0;
+      // Read Timer2 readings and substact space to get the pulse value
+      pulse = ((TH2 << 8) | TL2) - space;
+      rx_c = true;
+      // Now we have to zero TH0, TL0, TH2 and TL2
+      TH0 = 0;
+      TL0 = 0;
+      TH2 = 0;
+      TL2 = 0;
+      // And now we have to write TR0 = 1 and TR2 = 1;
+      // Eg. preparing for the next pulse-space cycle
+      // Timer0 will start after the INT0 is raised,
+      // Timer 2 will start immediatly
+      TR0=1;
+      TR2=1;
+    }
+}
 
 #ifdef DEBUG
 __xdata uint8_t dbg_buff[20];
 #endif
-
-uint_fast16_t timer_val;
-
-/** The CDC EP2 write pointer */
-extern volatile __bit CDC_EP2_readPointer;
-extern volatile __xdata uint8_t CDC_writePointer;
-uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
-uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
-uint8_t rx_samples;
-uint8_t h,l,h1,l1;
-
-bool rx_c;
-bool rx_b;
-
-int cnt =0;
-uint_fast16_t first;
-uint_fast16_t last;
-int edge = 0;
-int count = 0;
-
-void t2(void) __interrupt(INT_NO_TMR2)
-{
-    if(CAP1F == 0 || EXF2 ==0){
-      // timer has timed out
-      TR2 = 0;
-    }
-    // If timer 2 is not on turn it on
-    if(TR2 == 0);TR2 = 1;
-    // Check if this is the first captured edge
-    if( edge == 0){
-      first = (T2CAP1H << 8) & 0xff00 | T2CAP1L;
-      edge++;
-      CAP1F = 0;
-    }else if(edge == 1){
-      last = (T2CAP1H << 8) & 0xff00 | T2CAP1L;
-      if(!rx_c){
-        timer_val = (last-first);
-        rx_c = true;
-        edge = 0;
-        CAP1F = 0;
-        return;
-      }else{
-        // overflow
-        DBG("ovf\n");
-        while(1);
-      }
-    }
-}
-
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
   USB_interrupt();
+}
+
+/** @brief Timer0 Interrupt routine */
+void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
+{ 
+
 }
 
 static enum _mode {
@@ -115,6 +141,7 @@ void SetUpDefaultMainMode(void) {
 // ===================================================================================
 // Main Function
 // ===================================================================================
+
 void main(void) {
   // Setup
   CLK_config();                           // configure system clock
@@ -124,46 +151,36 @@ void main(void) {
   OLED_init();                          // Init the oled display/debugging  
   #endif
   SetUpDefaultMainMode();                 // Setup default main mode
-  // this is the interupt pin, the ir receiver
-  PIN_input(P14);  
-  // Output pin used to observe the interrupt 0 pin change
-  PIN_output(PIN_LED);
- 
-  // Setup the timer
-  T2CON = 0b00001001;   /* Run in time mode not counting */ 
+  // Setup the timer0 Gated by Int0, when int0 becomes high, timer is started
+  TMOD |= bT0_M0 | bT0_GATE ;   /* Run in time mode not counting */ 
   /* By default we are running 24MHz system clock and 2MHz timer clock */
   #ifdef TIMER_CLOCK_FAST
   T2MOD =0b00010000; /* Divide the system clock by 4 */
   #else
-  T2MOD = bT2_CAP_M0|bT2_CAP1_EN; // Configure timer 2 in capture mode, pin P14 activates it
+  T2MOD =0b00000000; /* Divide the system clock by 12 */
   #endif
-  PIN_FUNC |= bT2_PIN_X;
-	ET2  = 1;     /* Enable global interrupt */
-  TR2 = 0;
 
-  rx_samples = 0;
-  bool buffer_sent = false;
-  int i = 0;
+	EA  = 1;     /* Enable global interrupt */
+  EX0 = 1;    // Enable INT0
+  IT0 = 1;    // INT0 is edge triggered
+
   // Main loop
   while(1) {
-    // If we have timer measuremnts available put them in the CDC buffer
+    // If we have pulse-space measuremnts available, put them in the CDC buffer
     if(rx_c){
-      while(CDC_writeBusyFlag);                       // wait for ready to write
-      cdc_In_buffer[i] =(timer_val >> 8) & 0xff;        // write character to buffer
-      i++;
-      CDC_writePointer++;
+      *cdc_In_buffer_main++ = (pulse >> 8) & 0xff;
+      *cdc_In_buffer_main++ = pulse;
+      *cdc_In_buffer_main++ = (space >> 8) & 0xff;
+      *cdc_In_buffer_main++ = space;
+      DBG("Pulse: %u\n", pulse);
+      DBG("Space: %u\n", space);
+      while(1);
+      CDC_writePointer += sizeof(uint32_t);
       if(CDC_writePointer == MAX_PACKET_SIZE){
-        CDC_flush();
-        i= 0;
+        WaitInReady();
+        CDC_flush(); // flush the buffer
       }
-      while(CDC_writeBusyFlag);                       // wait for ready to write
-      cdc_In_buffer[i] = timer_val ;        // write character to buffer
-      i++;
-      CDC_writePointer++;
-      if(CDC_writePointer == MAX_PACKET_SIZE) {
-        CDC_flush();
-      i=0;}
-      rx_c = false;
+      rx_c = 0;
     }
   }
 }
