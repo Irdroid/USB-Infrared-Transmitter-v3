@@ -45,15 +45,20 @@
 __xdata uint8_t dbg_buff[20];
 uint16_t pulse;
 uint16_t space;
+
+uint16_t pulse1;
+uint16_t space1;
+
 /** The CDC EP2 write pointer */
 extern volatile __xdata uint8_t CDC_writePointer;
 
 uint8_t * cdc_In_buffer_main = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
 
-bool rx_c;
+bool rxflag1;
+bool rxflag2;
 
 /** Timer0 is configured to automatically start when the INT0 is high
- *  and TR0=1; In the INT0 ISR, we zero timer0 TH0 and TL0, zero T2H and
+ * and TR0=1; In the INT0 ISR, we zero timer0 TH0 and TL0, zero T2H and
  * T2L and we start timer2 and write TR0 = 1, when INT0 becomes high,
  * Timer0 is automatically started (via the INT0 gate configuration for
  * timer0, when we have another INT0 interrupt, we read and save timer0
@@ -94,11 +99,21 @@ void ext0_interrupt(void) __interrupt(INT_NO_INT0)
       TR0 = 0;
       // Stop timer2
       TR2 = 0;
-      // Read Timer0 readings , this is the IR signal space
-      space = (TH0 << 8) | TL0;
-      // Read Timer2 readings and substact space to get the pulse value
-      pulse = ((TH2 << 8) | TL2) - space;
-      rx_c = true;
+      if(!rxflag1){
+        // Read Timer0 readings , this is the IR signal space
+        space = (TH0 << 8) | TL0;
+        // Read Timer2 readings and substact space to get the pulse value
+        pulse = ((TH2 << 8) | TL2) - space;
+        rxflag1 = true;
+      }else if(!rxflag2){
+        // Read Timer0 readings , this is the IR signal space
+        space1 = (TH0 << 8) | TL0;
+        // Read Timer2 readings and substact space to get the pulse value
+        pulse1 = ((TH2 << 8) | TL2) - space;
+        rxflag2 = true;
+      }else{
+        // overflow
+      }
       // Now we have to zero TH0, TL0, TH2 and TL2
       TH0 = 0;
       TL0 = 0;
@@ -174,12 +189,11 @@ void main(void) {
   // Main loop
   while(1) {
     // If we have pulse-space measuremnts available, put them in the CDC buffer
-    if(rx_c){
+    if(rxflag1){
       // Divide by this constant to achieve irtoy time unit
       // and report measurements to the host as if it is the irtoy hardware 
       pulse = _divuint(pulse, 43);
       space = _divuint(space, 43);
-
       *cdc_In_buffer_main++ = (pulse >> 8) & 0xff;
       *cdc_In_buffer_main++ = pulse;
       *cdc_In_buffer_main++ = (space >> 8) & 0xff;
@@ -193,6 +207,26 @@ void main(void) {
         CDC_flush(); // flush the buffer
       }
       rx_c = 0;
+    }
+    // Check if we have pending data
+    if(rxflag2){
+      // Divide by this constant to achieve irtoy time unit
+      // and report measurements to the host as if it is the irtoy hardware 
+      pulse1 = _divuint(pulse1, 43);
+      space1 = _divuint(space1, 43);
+      *cdc_In_buffer_main++ = (pulse1 >> 8) & 0xff;
+      *cdc_In_buffer_main++ = pulse1;
+      *cdc_In_buffer_main++ = (space1 >> 8) & 0xff;
+      *cdc_In_buffer_main++ = space1;
+      DBG("Pulse1: %u\n", pulse1);
+      DBG("Space1: %u\n", space1);
+      while(1);
+      CDC_writePointer += sizeof(uint32_t);
+      if(CDC_writePointer == MAX_PACKET_SIZE){
+        WaitInReady();
+        CDC_flush(); // flush the buffer
+      }
+      rxflag2 = 0;
     }
   }
 }
