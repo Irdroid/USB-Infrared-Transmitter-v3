@@ -40,12 +40,14 @@
 #include "usb_cdc.h"
 #include "common.h"
 #include "oled_term.h"
+__xdata uint8_t dbg_buff[20];
 // here we save the pulse-space values
 // of the captured IR signal
-__xdata uint8_t dbg_buff[20];
 uint16_t pulse;
 uint16_t space;
-
+// This is a backup , where we store the pusle/space 
+// in case the data was not yet processed and we have 
+// new pulse/space data
 uint16_t pulse1;
 uint16_t space1;
 
@@ -206,7 +208,7 @@ void main(void) {
         WaitInReady();
         CDC_flush(); // flush the buffer
       }
-      rx_c = 0;
+      rxflag1 = 0;
     }
     // Check if we have pending data
     if(rxflag2){
