@@ -40,6 +40,8 @@
 #include "usb_cdc.h"
 #include "common.h"
 #include "oled_term.h"
+#include "gpio.h"
+#define IRRX P32
 __xdata uint8_t dbg_buff[20];
 // here we save the pulse-space values
 // of the captured IR signal
@@ -171,6 +173,8 @@ void main(void) {
   OLED_init();                          // Init the oled display/debugging  
   #endif
   SetUpDefaultMainMode();                 // Setup default main mode
+  // configure the IRRX pin as input, pulled up (this is INT0 pin)
+  PIN_input_PU(IRRX); 
   // Setup the timer0 Gated by Int0, when int0 becomes high, timer is started
   TMOD |= bT0_M0 | bT0_GATE ;   /* Run in time mode not counting */ 
   /* By default we are running 24MHz system clock and 2MHz timer clock */
