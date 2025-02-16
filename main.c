@@ -93,7 +93,7 @@ void ext0_interrupt(void) __interrupt(INT_NO_INT0)
       // Stop timer0
       TR0 = 0;
       // Stop timer2
-      TR2 = 0;int8_t rx_samples;
+      TR2 = 0;
       // Read Timer0 readings , this is the IR signal space
       space = (TH0 << 8) | TL0;
       // Read Timer2 readings and substact space to get the pulse value
@@ -125,7 +125,11 @@ void USB_ISR(void) __interrupt(INT_NO_USB) {
 /** @brief Timer0 Interrupt routine */
 void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
 { 
-
+  // If we are here it means that there is no INT0 pin change
+  // and we will send any remaining data to the host
+  // With the current configuration timer0 will interrupt each 32ms
+  WaitInReady();
+  CDC_flush(); // flush the buffer
 }
 
 static enum _mode {
@@ -141,7 +145,6 @@ void SetUpDefaultMainMode(void) {
 // ===================================================================================
 // Main Function
 // ===================================================================================
-
 void main(void) {
   // Setup
   CLK_config();                           // configure system clock
@@ -162,12 +165,21 @@ void main(void) {
 
 	EA  = 1;     /* Enable global interrupt */
   EX0 = 1;    // Enable INT0
+  
+  /** INT0 is edge triggered, this means that it will be active on
+   * each falling edge of the signal comming from the ir receiver
+   * */
   IT0 = 1;    // INT0 is edge triggered
 
   // Main loop
   while(1) {
     // If we have pulse-space measuremnts available, put them in the CDC buffer
     if(rx_c){
+      // Divide by this constant to achieve irtoy time unit
+      // and report measurements to the host as if it is the irtoy hardware 
+      pulse = _divuint(pulse, 43);
+      space = _divuint(space, 43);
+
       *cdc_In_buffer_main++ = (pulse >> 8) & 0xff;
       *cdc_In_buffer_main++ = pulse;
       *cdc_In_buffer_main++ = (space >> 8) & 0xff;
