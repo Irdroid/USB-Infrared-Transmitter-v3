@@ -146,12 +146,13 @@ void irsSetup(void) {
     /*
      * PWM registers configuration CH552
      * Fosc = 24000000 Hz
-     * Fpwm = 37.538 Hz (Requested : 38000 Hz)
+     * Fpwm = 31.250 Hz (Requested : 38000 Hz)
      * Duty Cycle = 50 %
      */
     //PWM_set_freq(14000);                    
-    PWM_CK_SE = 5;
+    PWM_CK_SE = 3;
     PIN_output(PIN_PWM); 
+    //PIN_low(PIN_PWM); 
     // Setup the PWM Duty cycle to 50%
     PWM_write(PIN_PWM, PWM_DUTY_50);  
 
