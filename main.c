@@ -100,9 +100,9 @@ void ext0_interrupt(void) __interrupt(INT_NO_INT0)
       TR2 = 1;
     }else{
       // Stop timer0
-      TR0 = 0;
+      //TR0 = 0;
       // Stop timer2
-      TR2 = 0;
+      //TR2 = 0;
       if(!rxflag1){
         // Read Timer0 readings , this is the IR signal space
         space = (TH0 << 8) | TL0;
@@ -128,8 +128,8 @@ void ext0_interrupt(void) __interrupt(INT_NO_INT0)
       // Eg. preparing for the next pulse-space cycle
       // Timer0 will start after the INT0 is raised,
       // Timer 2 will start immediatly
-      TR0=1;
-      TR2=1;
+      //TR0=1;
+      //TR2=1;
     }
 }
 
@@ -148,8 +148,31 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
   // If we are here it means that there is no INT0 pin change
   // and we will send any remaining data to the host
   // With the current configuration timer0 will interrupt each 32ms
+  // Stop timer0
+  /** the last pulse is captured here  */
+  /*
+  * IR Signal(INT0)_______         ______________No more signal
+  *                      |        |              
+  *                      |        |              
+  *                      | Pulse  |         
+  *                      |________|              
+  *                   (T2_ON)  (T0_ON)           Timer0 Int ~32ms
+  */
+  TR0 = 0;
+  // Stop timer2
+  TR2 = 0;
+  // Read Timer2 readings and substact space to get the pulse value
+  pulse = ((TH2 << 8) | TL2);
+  pulse = _divuint(pulse, 43);
+  // Put it into the CDC buffer
+  *cdc_In_buffer_main++ = (pulse >> 8) & 0xff;
+  *cdc_In_buffer_main = pulse;
+  // Increment the write pointer by 2 octets
+  CDC_writePointer += sizeof(uint16_t);
   WaitInReady();
   CDC_flush(); // flush the buffer
+  TR0=0;
+  TR2=0;
 }
 
 static enum _mode {
