@@ -85,4 +85,14 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len);
 
 /** @brief Timer0 Interrupt callback routine */
 void timer0_int_callback(void);  
+
+/** @brief This functions is used to configure a PWM-like output on
+ *  one of the GPIO pins e.g Soft PWM
+ * 
+ * @param[in] freq - The desired pwm frequency in HZ
+ * @param[out] timer1_pwm_val - This is the timer value that we set
+ *  in order to make it interrupt and achieve the desired frequency on
+ *  the PWM-like output pin
+ */
+void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val);
 #endif

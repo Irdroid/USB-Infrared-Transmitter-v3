@@ -108,6 +108,17 @@ static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *
     *buf = time_val;
 }
 
+void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
+    //calculate the timer value that we need to set
+    // timer1_pwm_val = (1/freq / 1/Timer_clock)
+    float target_period = ((1/((float)(freq)))/(SOFT_PWM_MIN_PER));
+    *timer1_pwm_val = (uint16_t)(target_period);
+    // Invert the value which will later be set to
+    // TH1 = (timer1_pwm_val >> 8) & 0xff;
+    // TL1 = timer1_pwm_val;
+    *timer1_pwm_val = ~(*timer1_pwm_val);
+}
+
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
     
     WaitOutReady();
@@ -146,10 +157,16 @@ void irsSetup(void) {
     /*
      * PWM registers configuration CH552
      * Fosc = 24000000 Hz
+     * Fpwm = Fosc / 256 / PWM_CK_SE
      * Fpwm = 31.250 Hz (Requested : 38000 Hz)
      * Duty Cycle = 50 %
-     */
-    //PWM_set_freq(14000);                    
+     * 
+     * When using the hardware pwm module it seems, that
+     * it is not possible to set the PWM carrier freq to
+     * 38KHz, therefore this can be achieved using a timer,
+     * and a GPIO pin, that way we can be more flexible setting
+     * the correct PWM frequency
+     */    
     PWM_CK_SE = 3;
     PIN_output(PIN_PWM); 
     //PIN_low(PIN_PWM); 
