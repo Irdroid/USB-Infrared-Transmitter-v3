@@ -171,8 +171,8 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
   CDC_writePointer += sizeof(uint16_t);
   WaitInReady();
   CDC_flush(); // flush the buffer
-  TR0=0;
-  TR2=0;
+  // Zero the CDC In buffer pointer
+  cdc_In_buffer_main = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE;
 }
 
 static enum _mode {
