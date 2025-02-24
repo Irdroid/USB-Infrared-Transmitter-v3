@@ -10,6 +10,11 @@
 #define PIN_SCL             P17       // I2C SCL
 #define PIN_PWM             P34       // PWM pin
 #define SOFT_PWM_MIN_PER    0.0000005F// minimum timer tick for soft PWM
+#define SOFT_PWM
+
+#ifdef SOFT_PWM
+#define PWM_FREQ            38000     // PWM Carrier is 38KHz
+#endif
 // USB device descriptor
 #define USB_VENDOR_ID       0x4d8    // VID Irdroid
 #define USB_PRODUCT_ID      0xf58c   // PID Irdroid 

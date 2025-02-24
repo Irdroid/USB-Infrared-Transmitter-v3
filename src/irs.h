@@ -18,8 +18,14 @@
 
 #define PWM_DUTY_50 128 // PWM Duty cycle constant for 50% Duty cycle
 #define LED_PIN P35 // Macro for the LED PIN
+
+#ifndef SOFT_PWM
 #define PWMon() PWM_start(PIN_PWM); // Macro to turn on the PWM
 #define PWMoff() PWM_stop(PIN_PWM); // Macro to turn off the PWM
+#else
+#define PWMon() TR1 = 1; // Enable timer PWM
+#define PWMoff() TR1 = 0; PIN_low(PIN_PWM);  
+#endif
 
 #define LedOn() PIN_high(LED_PIN); // Turn On the Blue LED
 #define LedOff() PIN_low(LED_PIN); // Turn On the Blue LED
@@ -85,6 +91,9 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len);
 
 /** @brief Timer0 Interrupt callback routine */
 void timer0_int_callback(void);  
+
+/** @brief Timer1 Interrupt callback routine */
+void timer1_int_callback(void);  
 
 /** @brief This functions is used to configure a PWM-like output on
  *  one of the GPIO pins e.g Soft PWM

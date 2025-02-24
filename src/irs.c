@@ -28,6 +28,11 @@ __xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
 #define IRS_TRANSMIT_HI	0
 #define IRS_TRANSMIT_LO	1
 
+#ifdef SOFT_PWM
+__xdata uint16_t timer1_pwm_val;
+__xdata uint16_t *timer1_pwm_ptr = &timer1_pwm_val;
+#endif
+
 /** @brief A Structure, holding the Irdroid USB Infrared Transceiver IRs data */
 static struct {
     unsigned char RXsamples;
@@ -87,6 +92,18 @@ void timer0_int_callback(void)
 
         }  
 }
+
+/** @brief Timer1 Interrupt callback routine */
+void timer1_int_callback(void){
+    
+    #ifdef SOFT_PWM
+    PIN_toggle(PIN_PWM); // Toggle the PWM pin
+     // Set timer1 High and Low SFRs again
+    TH1 = (*timer1_pwm_ptr >> 8) & 0xff;
+    TL1 = *timer1_pwm_ptr;
+    #endif
+    // TODO: Check if anything else is needed here
+} 
 // ============================================================================
 // Function Definitions
 // ============================================================================
@@ -117,6 +134,12 @@ void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
     // TH1 = (timer1_pwm_val >> 8) & 0xff;
     // TL1 = timer1_pwm_val;
     *timer1_pwm_val = ~(*timer1_pwm_val);
+    // Set timer1 High and Low SFRs
+    TH1 = (*timer1_pwm_val >> 8) & 0xff;
+    TL1 = *timer1_pwm_val;
+    ET1 = 1; // Enable Timer 1 interrupt
+    // Configure the PWM pin as output
+    PIN_output(PIN_PWM);
 }
 
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
@@ -166,17 +189,25 @@ void irsSetup(void) {
      * 38KHz, therefore this can be achieved using a timer,
      * and a GPIO pin, that way we can be more flexible setting
      * the correct PWM frequency
-     */    
+     * 
+     * We have two options, one is the hardware PWM module,
+     * the second is the implemented soft PWM, using timer 1.
+     */ 
+    
+    #ifndef SOFT_PWM   
     PWM_CK_SE = 3;
     PIN_output(PIN_PWM); 
     //PIN_low(PIN_PWM); 
     // Setup the PWM Duty cycle to 50%
     PWM_write(PIN_PWM, PWM_DUTY_50);  
+    #else
+    PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
+    #endif
 
     // Setup Timer0 & enable the interrupts
     EA  = 1;            /* Enable global interrupt */
     ET0 = 0;            /* Enable timer0 interrupt */
-    TMOD = 0x1;   /* Run in time mode not counting */ 
+    TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
     /* By default we are running 24MHz system clock and 2MHz timer clock */
     #ifdef TIMER_CLOCK_FAST
     T2MOD =0b00010000; /* Divide the system clock by 4 */

@@ -58,6 +58,12 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
   timer0_int_callback(); 
 }
 
+/** @brief Timer1 Interrupt routine */
+void timer1_interrupt(void) __interrupt(INT_NO_TMR1)   
+{ 
+  timer1_int_callback(); 
+}
+
 static enum _mode {
     IR_MAIN = 0,
     IR_SUMP, //SUMP logic analyzer
