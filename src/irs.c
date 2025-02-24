@@ -127,9 +127,9 @@ static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *
 
 void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
     //calculate the timer value that we need to set
-    // timer1_pwm_val = (1/freq / 1/Timer_clock)
-    float target_period = ((1/((float)(freq)))/(SOFT_PWM_MIN_PER));
-    *timer1_pwm_val = (uint16_t)(target_period);
+    // timer1_pwm_val (half period duration) = (1/freq / 1/Timer_clock) / 2
+    float target_period = (((1/((float)(freq)))/(SOFT_PWM_MIN_PER))/2.0F);
+    *timer1_pwm_val = (uint16_t)(target_period - SPWM_DRIFT);
     // Invert the value which will later be set to
     // TH1 = (timer1_pwm_val >> 8) & 0xff;
     // TL1 = timer1_pwm_val;
@@ -201,8 +201,10 @@ void irsSetup(void) {
     // Setup the PWM Duty cycle to 50%
     PWM_write(PIN_PWM, PWM_DUTY_50);  
     #else
-    PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
+    // Configure Soft PWM for 38KHz carrier
+    PwmConfigure(38000, timer1_pwm_ptr);
     #endif
+    PWMon();
 
     // Setup Timer0 & enable the interrupts
     EA  = 1;            /* Enable global interrupt */

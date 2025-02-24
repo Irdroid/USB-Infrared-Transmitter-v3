@@ -11,6 +11,7 @@
 #define PIN_PWM             P34       // PWM pin
 #define SOFT_PWM_MIN_PER    0.0000005F// minimum timer tick for soft PWM
 #define SOFT_PWM
+#define SPWM_DRIFT          6         // We observe 3us PWM Drift, this is correction constant
 
 #ifdef SOFT_PWM
 #define PWM_FREQ            38000     // PWM Carrier is 38KHz
