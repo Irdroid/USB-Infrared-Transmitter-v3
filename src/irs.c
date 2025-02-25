@@ -9,6 +9,7 @@
 // ===================================================================================
 #include "src/irs.h"
 #include "common.h"
+#include "stdbool.h"
 
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;
@@ -24,6 +25,7 @@ uint8_t *OutPtr; // Same naming of this pointer as in the irtoy code
 static unsigned char TxBuffCtr; // Transmit buffer counter
 static unsigned char h, l, tmr0_buf[3]; // Timer0 buffer
 __xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
+__xdata bool triggered;
 
 #define IRS_TRANSMIT_HI	0
 #define IRS_TRANSMIT_LO	1
@@ -130,9 +132,7 @@ void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
     // timer1_pwm_val (half period duration) = (1/freq / 1/Timer_clock) / 2
     float target_period = (((1/((float)(freq)))/(SOFT_PWM_MIN_PER))/2.0F);
     *timer1_pwm_val = (uint16_t)(target_period-SPWM_DRIFT);
-    // Invert the value which will later be set to
-    // TH1 = (timer1_pwm_val >> 8) & 0xff;
-    // TL1 = timer1_pwm_val;
+    // Invert the value which will later be set to timer 1 TH/TL regs
     *timer1_pwm_val = ~(*timer1_pwm_val);
     // Set timer1 High and Low SFRs
     TH1 = (*timer1_pwm_val >> 8) & 0xff;
@@ -143,19 +143,25 @@ void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
 }
 
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
-    
-    WaitOutReady();
-    if(CDC_available())
+   
+   if(CDC_available())
     {    
+       // DBG("count %d\n", CDC_readByteCount);
         if(len > CDC_readByteCount)
         {
             len = CDC_readByteCount;
         }
-        for (int i=0; i < len; i++){
-             buffer[i] = CDC_read_b();
+        if(len < CDC_readByteCount){
+            len = 0;
         }
-    }
+       if(len != 0){ 
+        for (int i=0; i < len; i++){
+             buffer[i] = CDC_read();
+        }
+       }
     return len;
+    }
+   return 0;
 }
 
 void GetUsbIrdroidVersion(void) {
@@ -197,7 +203,7 @@ void irsSetup(void) {
     #ifndef SOFT_PWM   
     PWM_CK_SE = 3;
     PIN_output(PIN_PWM); 
-    //PIN_low(PIN_PWM); 
+    PIN_low(PIN_PWM); 
     // Setup the PWM Duty cycle to 50%
     PWM_write(PIN_PWM, PWM_DUTY_50);  
     #else
@@ -236,14 +242,11 @@ unsigned char irsService(void)
     static _smio irIOstate = I_IDLE;
     static unsigned int txcnt;
     static unsigned char i;
-    irS.handshake = 1;
-
     if (irS.TXsamples == 0) {
-        irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
+        irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, sizeof(uint8_t));
+        //DBG("samples %d\n", irS.TXsamples);
         TxBuffCtr = 0;
     }
-    
-    WaitInReady();
 
     if (irS.TXsamples > 0) {
         
@@ -265,11 +268,10 @@ unsigned char irsService(void)
                         irIOstate = I_TX_STATE; //change to transmit data processing state
 						tmr0_buf[2]=0x00; //last data packet flag
 						irS.txerror=0; //reset error message
-                        irS.handshake = 1;
                         LedOff();
                         
                         if (irS.handshake) {
-                            //WaitInReady();
+                            WaitInReady();
                             cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
                             CDC_writePointer += sizeof(uint8_t); // Increment the write counter
                             CDC_flush(); // flush the buffer 
@@ -422,6 +424,5 @@ unsigned char irsService(void)
         }   
     
     }
-
     return 0;
 }

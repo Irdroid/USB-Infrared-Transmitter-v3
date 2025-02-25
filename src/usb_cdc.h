@@ -37,7 +37,7 @@ extern volatile __bit CDC_writeBusyFlag;     // flag of whether upload pointer i
 void WaitInReady(void);            // Wait for IN to become available
 void WaitOutReady(void);            // Wait for OUT to become available
 void CDC_flush(void);             // flush OUT buffer
-void CDC_read(void);              // read single character from IN buffer
+char CDC_read(void);              // read single character from IN buffer
 char CDC_read_b(void);
 void CDC_write(char c);           // write single character to OUT buffer
 void CDC_print(char* str);        // write string to OUT buffer

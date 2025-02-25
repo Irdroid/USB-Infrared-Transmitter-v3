@@ -76,16 +76,14 @@ void CDC_println(char* str) {
 }
 
 // Read single character from IN buffer
-void CDC_read(void) {
-  //char data;
-  while(!CDC_readByteCount){
-    // OLED_write('s');
-  }                      // wait for data
-  //data = EP2_buffer[CDC_readPointer++];           // get character
-  if(CDC_readByteCount == 0)                    // dec number of bytes in buffer
+char CDC_read(void) {
+  char data;
+  while(!CDC_readByteCount);                      // wait for data
+  data = EP2_buffer[CDC_readPointer++];           // get character
+   if(--CDC_readByteCount == 0)                    // dec number of bytes in buffer
     UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)
               | UEP_R_RES_ACK;                    // request new data if empty
-  //return data;
+  return data;
 }
 // Read single character from IN buffer
 char CDC_read_b(void) {

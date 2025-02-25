@@ -23,7 +23,7 @@
 #define PWMon() PWM_start(PIN_PWM); // Macro to turn on the PWM
 #define PWMoff() PWM_stop(PIN_PWM); // Macro to turn off the PWM
 #else
-#define PWMon() TR1 = 1; // Enable timer PWM
+#define PWMon() TR1 = 1; // Enable timer / Soft PWM
 #define PWMoff() TR1 = 0; PIN_low(PIN_PWM);  
 #endif
 
