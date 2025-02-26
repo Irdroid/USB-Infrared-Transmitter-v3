@@ -203,6 +203,7 @@ void irsSetup(void) {
     #ifndef SOFT_PWM   
     PWM_CK_SE = 3;
     PIN_output(PIN_PWM); 
+    // Bring the pwm pin off/IR LED off
     PIN_low(PIN_PWM); 
     // Setup the PWM Duty cycle to 50%
     PWM_write(PIN_PWM, PWM_DUTY_50);  
@@ -244,7 +245,7 @@ unsigned char irsService(void)
     static unsigned char i;
     if (irS.TXsamples == 0) {
         irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, sizeof(uint8_t));
-        //DBG("samples %d\n", irS.TXsamples);
+        DBG("Samples %d\n", irS.TXsamples);
         TxBuffCtr = 0;
     }
 

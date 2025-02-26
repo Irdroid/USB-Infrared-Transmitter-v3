@@ -14,7 +14,7 @@
 #define SPWM_DRIFT          19         // We observe 3us PWM Drift, this is correction constant
 
 #ifdef SOFT_PWM
-#define PWM_FREQ            36000     // PWM Carrier is 38KHz
+#define PWM_FREQ            38000     // PWM Carrier is 38KHz
 #endif
 // USB device descriptor
 #define USB_VENDOR_ID       0x4d8    // VID Irdroid
