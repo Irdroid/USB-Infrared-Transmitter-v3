@@ -3,6 +3,7 @@
 // ===================================================================================
 
 #include "usb_handler.h"
+#include "irs.h"
 
 // ===================================================================================
 // Variables
@@ -362,6 +363,7 @@ void USB_EP0_IN(void) {
       USB_SetupLen -= len;
       UEP0_T_LEN    = len;
       UEP0_CTRL    ^= bUEP_T_TOG;                 // switch between DATA0 and DATA1
+      LedOff();
       break;
 
     case USB_SET_ADDRESS:
