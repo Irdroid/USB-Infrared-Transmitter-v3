@@ -5,7 +5,6 @@
 #pragma once
 
 // Pin definitions
-#define PIN_BUZZER          P15       // buzzer pin
 #define PIN_SDA             P16       // I2C SDA
 #define PIN_SCL             P17       // I2C SCL
 #define PIN_PWM             P34       // PWM pin

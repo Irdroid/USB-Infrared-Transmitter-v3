@@ -17,7 +17,7 @@
 #endif
 
 #define PWM_DUTY_50 128 // PWM Duty cycle constant for 50% Duty cycle
-#define LED_PIN P35 // Macro for the LED PIN
+#define LED_PIN P15 // Macro for the LED PIN
 
 #ifndef SOFT_PWM
 #define PWMon() PWM_start(PIN_PWM); // Macro to turn on the PWM

@@ -245,7 +245,7 @@ unsigned char irsService(void)
     static unsigned char i;
     if (irS.TXsamples == 0) {
         irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, sizeof(uint8_t));
-        DBG("Samples %d\n", irS.TXsamples);
+        //DBG("Samples %d\n", irS.TXsamples);
         TxBuffCtr = 0;
     }
 

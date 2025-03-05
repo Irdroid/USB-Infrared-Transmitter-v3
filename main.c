@@ -87,6 +87,7 @@ void main(void) {
   OLED_init();                          // Init the oled display/debugging  
   #endif
   SetUpDefaultMainMode();                 // Setup default main mode
+  PIN_low(PIN_PWM); 
   // Main loop
   while(1) {
     
