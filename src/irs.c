@@ -158,6 +158,9 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
         for (int i=0; i < len; i++){
              buffer[i] = CDC_read();
         }
+       }else{
+        // Ask for more bytes
+        UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
        }
     return len;
     }
