@@ -3,7 +3,7 @@
 
 #define HARDWARE_VERSION '3'
 #define FIRMWARE_VERSION_H '3'
-#define FIRMWARE_VERSION_L '1'
+#define FIRMWARE_VERSION_L '2'
 
 #define SAMPLE_ARRAY_SIZE 0x0040
 
