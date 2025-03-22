@@ -158,9 +158,6 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
         for (int i=0; i < len; i++){
              buffer[i] = CDC_read();
         }
-       }else{
-        // Ask for more bytes
-        UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
        }
     return len;
     }
@@ -244,10 +241,10 @@ void irsSetup(void) {
 unsigned char irsService(void)
 {   
     static _smio irIOstate = I_IDLE;
-    static unsigned int txcnt;
-    static unsigned char i;
+    static unsigned int txcnt = 0;
+    static unsigned char i = 0;
     if (irS.TXsamples == 0) {
-        irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, sizeof(uint8_t));
+        irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
         //DBG("Samples %d\n", irS.TXsamples);
         TxBuffCtr = 0;
     }
@@ -276,14 +273,13 @@ unsigned char irsService(void)
                         
                         if (irS.handshake) {
                             WaitInReady();
-                            cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
+                            cdc_In_buffer[0] = MAX_PACKET_SIZE;
                             CDC_writePointer += sizeof(uint8_t); // Increment the write counter
                             CDC_flush(); // flush the buffer 
                         }      
 
                         do {
                             OutPtr = cdc_Out_buffer;    
-                            WaitOutReady();
                             irS.TXsamples = getCDC_Out_ArmNext();
                             if (irS.TXsamples) { // host may have sent a ZLP skip transmit if so.
 
@@ -327,8 +323,7 @@ unsigned char irsService(void)
                                         UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
                                         // Ask the host to send us 62 bytes
                                         if (irS.handshake) {
-                                            WaitInReady();
-                                            cdc_In_buffer[0] = MAX_PACKET_SIZE - 2;
+                                            cdc_In_buffer[0] = MAX_PACKET_SIZE;
                                             CDC_writePointer += sizeof(uint8_t); // Increment the write counter
                                             CDC_flush(); // flush the buffer 
                                         }                  
