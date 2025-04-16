@@ -23,8 +23,8 @@
 #define PWMon() PWM_start(PIN_PWM); // Macro to turn on the PWM
 #define PWMoff() PWM_stop(PIN_PWM); // Macro to turn off the PWM
 #else
-#define PWMon() TR1 = 1; // Enable timer / Soft PWM
-#define PWMoff() TR1 = 0; PIN_low(PIN_PWM);  
+#define PWMon() TR1 = 1; ET1=1; TF1=0; // Enable timer / Soft PWM
+#define PWMoff() TR1 = 0; ET1 = 0; TF1 = 0; PIN_low(PIN_PWM);  
 #endif
 
 #define LedOn() PIN_high(LED_PIN); // Turn On the Blue LED
@@ -56,6 +56,7 @@
 #define IRIO_UART_WRITE		    0x42
 #define IRIO_IRW_FREQ           0x43
 #define CDC_DESC                0x22
+#define CUSTOM_FF               0xff
 
 typedef enum { //in out data state machine
     I_IDLE = 0,

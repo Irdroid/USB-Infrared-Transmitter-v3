@@ -18,14 +18,13 @@ extern volatile __xdata uint8_t CDC_writePointer;
 
 /** References to the CDC in and out buffers */
 uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
-uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+MAX_PACKET_SIZE; 
+uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+128; 
 
 uint8_t *OutPtr; // Same naming of this pointer as in the irtoy code
 
 static unsigned char TxBuffCtr; // Transmit buffer counter
 static unsigned char h, l, tmr0_buf[3]; // Timer0 buffer
 __xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
-__xdata bool triggered;
 
 #define IRS_TRANSMIT_HI	0
 #define IRS_TRANSMIT_LO	1
@@ -53,7 +52,32 @@ static struct {
     unsigned char RXcompleted : 1;
 	unsigned char txerror : 1;
 } irS;
-
+static void fast_usb_handler(void) {
+  // USB transfer completed interrupt
+  if(UIF_TRANSFER) {
+    // Dispatch to service functions
+    uint8_t callIndex = USB_INT_ST & MASK_UIS_ENDP;
+    switch (USB_INT_ST & MASK_UIS_TOKEN) {
+      case UIS_TOKEN_IN:
+        switch (callIndex) {
+          #ifdef EP2_IN_callback
+          case 2: EP2_IN_callback(); break;
+          #endif
+          default: break;
+        }
+        break;
+      case UIS_TOKEN_OUT:
+        switch (callIndex) {
+          #ifdef EP2_OUT_callback
+          case 2: EP2_OUT_callback(); break;
+          #endif
+          default: break;
+        }
+        break;
+    }
+    UIF_TRANSFER = 0;                       // clear interrupt flag
+  }
+}
 /** @brief Timer0 Interrupt callback routine */
 void timer0_int_callback(void)   
 { 
@@ -151,13 +175,13 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
         {
             len = CDC_readByteCount;
         }
-        if(len < CDC_readByteCount){
-            len = 0;
-        }
        if(len != 0){ 
         for (int i=0; i < len; i++){
-             buffer[i] = CDC_read();
+             buffer[i] = CDC_read_b();
         }
+       }
+       if(len == 3 && buffer[0]==0x06){
+        len =0;
        }
     return len;
     }
@@ -165,6 +189,7 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
 }
 
 void GetUsbIrdroidVersion(void) {
+    cdc_In_buffer = inWhich();
     cdc_In_buffer[0] = 'V'; //answer OK
     cdc_In_buffer[1] = HARDWARE_VERSION;
     cdc_In_buffer[2] = FIRMWARE_VERSION_H;
@@ -175,14 +200,7 @@ void GetUsbIrdroidVersion(void) {
 }
 
 void irsSetup(void) {
-     
-    cdc_In_buffer[0] = 'S'; //answer to the host that we are in sampling mode
-    cdc_In_buffer[1] = '0';
-    cdc_In_buffer[2] = '1';
-    WaitInReady();
-    CDC_writePointer += 3;
-    CDC_flush();
-    
+   
     /*
      * PWM registers configuration CH552
      * Fosc = 24000000 Hz
@@ -199,30 +217,8 @@ void irsSetup(void) {
      * We have two options, one is the hardware PWM module,
      * the second is the implemented soft PWM, using timer 1.
      */ 
-    
-    #ifndef SOFT_PWM   
-    PWM_CK_SE = 3;
-    PIN_output(PIN_PWM); 
-    // Bring the pwm pin off/IR LED off
-    PIN_low(PIN_PWM); 
-    // Setup the PWM Duty cycle to 50%
-    PWM_write(PIN_PWM, PWM_DUTY_50);  
-    #else
-    // Configure Soft PWM for 38KHz carrier
-    PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
-    #endif
-
-    // Setup Timer0 & enable the interrupts
-    EA  = 1;            /* Enable global interrupt */
-    ET0 = 0;            /* Enable timer0 interrupt */
-    TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
-    /* By default we are running 24MHz system clock and 2MHz timer clock */
-    #ifdef TIMER_CLOCK_FAST
-    T2MOD =0b00010000; /* Divide the system clock by 4 */
-    #else
-    T2MOD = bT1_CLK; /* Divide the system clock by 12 */
-    #endif
      //setup for IR RX
+
     irS.rxflag1 = 0;
     irS.rxflag2 = 0;
     irS.txflag = 0;
@@ -236,6 +232,13 @@ void irsSetup(void) {
     irS.sendfinish = 0;
     irS.handshake = 0;
     irS.RXcompleted = 0;
+    WaitInReady();
+    cdc_In_buffer = inWhich();
+    cdc_In_buffer[0] = 'S'; //answer to the host that we are in sampling mode
+    cdc_In_buffer[1] = '0';
+    cdc_In_buffer[2] = '1';
+    CDC_writePointer += 3;
+    CDC_flush();
 }
 
 unsigned char irsService(void)
@@ -245,21 +248,15 @@ unsigned char irsService(void)
     static unsigned char i = 0;
     if (irS.TXsamples == 0) {
         irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
-        //DBG("Samples %d\n", irS.TXsamples);
         TxBuffCtr = 0;
     }
 
     if (irS.TXsamples > 0) {
         
-        switch (irIOstate) {
-            
+        switch (irIOstate) { 
             case I_IDLE:
-                    
                 switch (irToy.s[TxBuffCtr]) {
-                   
                     case IRIO_TRANSMIT_unit: //start transmitting
-                        
-                        DBG("Transmit mode %x\n", irToy.s[TxBuffCtr]);
                         txcnt = 0; //reset transmit byte counter, used for diagnostic
                         ET0 = 0; // Disable Timer 0 interrupt
                         TR0 = 0; //enable the timer
@@ -270,19 +267,34 @@ unsigned char irsService(void)
 						tmr0_buf[2]=0x00; //last data packet flag
 						irS.txerror=0; //reset error message
                         LedOff();
-                        
+                        IE_USB = 0;
                         if (irS.handshake) {
+                            cdc_In_buffer = inWhich();
+                            UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK; 
                             WaitInReady();
                             cdc_In_buffer[0] = MAX_PACKET_SIZE;
                             CDC_writePointer += sizeof(uint8_t); // Increment the write counter
                             CDC_flush(); // flush the buffer 
                         }      
-
+                        
                         do {
-                            OutPtr = cdc_Out_buffer;    
+                            
                             irS.TXsamples = getCDC_Out_ArmNext();
+                            OutPtr = OutWhich();   
                             if (irS.TXsamples) { // host may have sent a ZLP skip transmit if so.
-
+                                       
+                                        // Ask for more bytes
+                                        UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
+                                        // Ask the host to send us 62 bytes
+                                        if (irS.handshake) {
+                                            cdc_In_buffer = inWhich();
+                                            WaitInReady();
+                                            cdc_In_buffer[0] = MAX_PACKET_SIZE;
+                                            CDC_writePointer += sizeof(uint8_t); // Increment the write counter
+                                            CDC_flush(); // flush the buffer 
+                                            fast_usb_handler(); 
+                                        }                  
+                                    
                                 for (i = 0; i < irS.TXsamples; i += 2, OutPtr += 2) {
 
                                     // JTR 3 The idea here is to preprocess the "OVERHEAD"
@@ -296,6 +308,8 @@ unsigned char irsService(void)
                                         i = irS.TXsamples;
                                         *(OutPtr + 1) = 0; // JTR3 replace 0xFFFF with 0020 (Ian's value)
                                         *(OutPtr) = 20;
+                                        // Check if this need to be here
+                                        CDC_readByteCount = 0;
                                     }
 
                                     align_irtoy_ch552(*OutPtr, *(OutPtr+1), OutPtr);
@@ -309,28 +323,19 @@ unsigned char irsService(void)
                                     if (*(OutPtr + 1) == 0) // did we get rollover in LSB?
                                         *(OutPtr) += 1; // then must add the carry to MSB
 
-                                    while (irS.txflag == 1);
+                                    while (irS.txflag == 1){
+                                        fast_usb_handler(); 
+                                    }
                                    
                                     tmr0_buf[1] = *(OutPtr); //put the second byte in the buffer
                                     tmr0_buf[0] = *(OutPtr + 1); //put the first byte in the buffer
                                     
                                     txcnt += 2; //total bytes transmitted
                                     // Decrement the number of bytes read
-                                    CDC_readByteCount -= 2;
-
-                                    if(CDC_readByteCount == 0){
-                                        // Ask for more bytes
-                                        UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)| UEP_R_RES_ACK;  
-                                        // Ask the host to send us 62 bytes
-                                        if (irS.handshake) {
-                                            cdc_In_buffer[0] = MAX_PACKET_SIZE;
-                                            CDC_writePointer += sizeof(uint8_t); // Increment the write counter
-                                            CDC_flush(); // flush the buffer 
-                                        }                  
-                                    }
+                                    //CDC_readByteCount -= 2;
 
                                     if (irS.TX == 0) {//enable interrupt if this is the first time
-
+                                        fast_usb_handler(); 
                                         irS.TX = 1;
                                         TH0 = tmr0_buf[1]; //first set the high byte
                                         TL0 = tmr0_buf[0]; //set low byte copies high byte too
@@ -354,25 +359,31 @@ unsigned char irsService(void)
                         } while (irIOstate != I_LAST_PACKET);
 
                         irIOstate = I_IDLE;
-                        
+                        IE_USB = 1;
                         if (irS.sendcount) { //return the total number of bytes transmitted if required
                             WaitInReady();
+                            cdc_In_buffer = inWhich();
                             cdc_In_buffer[0] = 't';
                             cdc_In_buffer[1] = (txcnt >> 8)&0xff;
                             cdc_In_buffer[2] = (txcnt & 0xff);
                             CDC_writePointer += 3;
                             CDC_flush(); // flush the buffer 
+                            //USB_interrupt();
                         }
-                        while (irS.txflag == 1);
+                        while (irS.txflag == 1){
+                            //USB_interrupt();
+                        }
                         LedOff();
                         if (irS.sendfinish) { // Really redundant giving we can send a count above.
                             WaitInReady();
+                            cdc_In_buffer = inWhich();
                             cdc_In_buffer[0] = 'C';
 							if(irS.txerror) cdc_In_buffer[0] = 'F';
                             CDC_writePointer += 1;
                             CDC_flush(); // flush the buffer 
-
+                            //USB_interrupt();
                         }
+                        
                         irS.TXsamples = 1; //will be zeroed at end, super hack yuck!  //JTR3 super yuck!
                         break;
                     
@@ -404,6 +415,7 @@ unsigned char irsService(void)
                         break;
                     case IRIO_GETCNT:
                         WaitInReady();
+                        cdc_In_buffer = inWhich();
                         cdc_In_buffer[0] = 't';
                         cdc_In_buffer[1] = (txcnt >> 8)&0xff;
                         cdc_In_buffer[2] = (txcnt & 0xff);
@@ -414,6 +426,14 @@ unsigned char irsService(void)
                         irS.sendcount = 1;
                         break;
                         // JTR3 End of new commands
+                    case IRIO_SETUP_PWM:
+                        irS.TXsamples -=2;
+                        TxBuffCtr +=3;
+                        break;
+                    case CUSTOM_FF:
+                        LedOff();
+                        //DBG("IR Reset %x\n", irToy.s[TxBuffCtr]);
+                        return 1; //need to flag exit!
                     default:
                         break;
                 }

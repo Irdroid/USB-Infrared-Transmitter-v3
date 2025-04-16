@@ -81,23 +81,40 @@ void SetUpDefaultMainMode(void) {
 void main(void) {
   // Setup
   CLK_config();                           // configure system clock
-  DLY_ms(5);                              // wait for clock to stabilize
+  DLY_ms(10);                              // wait for clock to stabilize
   CDC_init();                             // init the USB CDC
   #ifdef DEBUG
   OLED_init();                          // Init the oled display/debugging  
   #endif
   SetUpDefaultMainMode();                 // Setup default main mode
   PIN_low(PIN_PWM); 
+   #ifndef SOFT_PWM   
+    PWM_CK_SE = 3;
+    PIN_output(PIN_PWM); 
+    // Bring the pwm pin off/IR LED off
+    PIN_low(PIN_PWM); 
+    // Setup the PWM Duty cycle to 50%
+    PWM_write(PIN_PWM, PWM_DUTY_50);  
+    #else
+    // Configure Soft PWM for 38KHz carrier
+    PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
+    #endif
+    // Setup Timer0 & enable the interrupts
+    EA  = 1;            /* Enable global interrupt */
+    ET0 = 0;            /* Enable timer0 interrupt */
+    TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
+    /* By default we are running 24MHz system clock and 2MHz timer clock */
+    #ifdef TIMER_CLOCK_FAST
+    T2MOD =0b00010000; /* Divide the system clock by 4 */
+    #else
+    T2MOD = bT1_CLK; /* Divide the system clock by 12 */
+    #endif
   // Main loop
   while(1) {
     
     switch (mode)
     {
-      case IR_S:
-        if (irsService() != 0) SetUpDefaultMainMode();
-        break;
-      
-      default:
+      case IR_MAIN:
         if(CDC_available()) {       // something coming in?
           
           char byte = CDC_read_b(); // read the character ...  
@@ -107,20 +124,26 @@ void main(void) {
 
               case 'S': //IRIO Sampling Mode
               case 's': 
-                  mode = IR_S;
+                  
                   irsSetup();
+                  mode = IR_S;
                   break;
               case 'V':
               case 'v':// Acquire Version
+              DBG("v");
                   GetUsbIrdroidVersion();
                   break;
-              case 0x00:
-                break;
               default:
                 break;         
         }
         break;
       }
+      case IR_S:
+        if (irsService() != 0) SetUpDefaultMainMode();
+        break;
+      default:
+        break;
+      
     }    
   }
 }

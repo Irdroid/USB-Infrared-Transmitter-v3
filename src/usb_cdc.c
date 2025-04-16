@@ -4,6 +4,7 @@
 
 #include "usb_cdc.h"
 #include "src/oled_term.h"                // for OLED
+#include "common.h"
 // ===================================================================================
 // Variables and Defines
 // ===================================================================================
@@ -52,14 +53,31 @@ void WaitOutReady(void){
 }
 
 uint8_t getCDC_Out_ArmNext(void){
-  while(!CDC_readByteCount);  
+  while(!CDC_readByteCount){
+    USB_interrupt();
+  }  
   return CDC_readByteCount;
+}
+
+uint8_t * inWhich(void){
+  if(UEP2_CTRL & bUEP_T_TOG){
+    return &EP2_buffer[192];   
+    }else{
+    return &EP2_buffer[128];  
+    }
+}
+uint8_t * OutWhich(void){
+  if((UEP2_CTRL & bUEP_R_TOG) == 0){
+   return &EP2_buffer[64];   
+  }else{
+   return &EP2_buffer[0];  
+  }
 }
 
 // Write single character to OUT buffer
 void CDC_write(char c) {
   while(CDC_writeBusyFlag);                       // wait for ready to write
-  EP2_buffer[64 + CDC_writePointer++] = c;        // write character to buffer
+  EP2_buffer[128 + CDC_writePointer++] = c;        // write character to buffer
   if(CDC_writePointer == EP2_SIZE) CDC_flush();   // flush if buffer full
 }
 
@@ -74,25 +92,20 @@ void CDC_println(char* str) {
   CDC_write('\n');                                // write new line
   CDC_flush();                                    // flush OUT buffer
 }
-
-// Read single character from IN buffer
-char CDC_read(void) {
-  char data;
-  while(!CDC_readByteCount);                      // wait for data
-  data = EP2_buffer[CDC_readPointer++];           // get character
-   if(--CDC_readByteCount == 0)                    // dec number of bytes in buffer
-    UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)
-              | UEP_R_RES_ACK;                    // request new data if empty
-  return data;
-}
 // Read single character from IN buffer
 char CDC_read_b(void) {
   char data;
   while(!CDC_readByteCount);                      // wait for data
-  data = EP2_buffer[CDC_readPointer++];           // get character
+  if((UEP2_CTRL & bUEP_R_TOG) == 0){
+    data = EP2_buffer[64 + CDC_readPointer++];   
+  }else{
+    data = EP2_buffer[CDC_readPointer++];  
+  }
+             // get character
   if(--CDC_readByteCount == 0)                    // dec number of bytes in buffer
     UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)
-              | UEP_R_RES_ACK;                    // request new data if empty
+              | UEP_R_RES_ACK; 
+              // request new data if empty
   return data;
 }
 
@@ -106,10 +119,10 @@ void CDC_EP_init(void) {
   UEP2_DMA    = (uint16_t)EP2_buffer;             // EP2 data transfer address
   UEP1_CTRL   = bUEP_AUTO_TOG                     // EP1 Auto flip sync flag
               | UEP_T_RES_NAK;                    // EP1 IN transaction returns NAK
-  UEP2_CTRL   = bUEP_AUTO_TOG                     // EP2 Auto flip sync flag
+  UEP2_CTRL   =  bUEP_AUTO_TOG                   // EP2 Auto flip sync flag
               | UEP_T_RES_NAK                     // EP2 IN transaction returns NAK
               | UEP_R_RES_ACK;                    // EP2 OUT transaction returns ACK
-  UEP2_3_MOD  = bUEP2_RX_EN | bUEP2_TX_EN;        // EP2 double buffer (0x0C)
+  UEP2_3_MOD  = bUEP2_RX_EN | bUEP2_TX_EN | bUEP2_BUF_MOD;        // EP2 double buffer (0x0C)
   UEP4_1_MOD  = bUEP1_TX_EN;                      // EP1 TX enable (0x40)
   UEP1_T_LEN  = 0;                                // EP1 nothing to send
   UEP2_T_LEN  = 0;                                // EP2 nothing to send
@@ -161,6 +174,7 @@ void CDC_EP2_OUT(void) {
     UEP2_CTRL = (UEP2_CTRL & ~MASK_UEP_R_RES)
               | UEP_R_RES_NAK;                    // not ready to receive more for now
     CDC_readByteCount = USB_RX_LEN;               // set number of received data bytes
+   // DBG("wch %d", (UEP2_CTRL & bUEP_R_TOG));
     CDC_readPointer   = 0;                        // reset read pointer for fetching
   }
 }

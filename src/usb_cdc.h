@@ -68,5 +68,8 @@ typedef struct _CDC_LINE_CODING_TYPE {
 } CDC_LINE_CODING_TYPE, *PCDC_LINE_CODING_TYPE;
 /** @brief Get the number of bytes we received from the host */
 uint8_t getCDC_Out_ArmNext(void);
+uint8_t * inWhich(void);
+uint8_t * OutWhich(void);
+char CDC_read_b(void);
 extern __xdata CDC_LINE_CODING_TYPE CDC_lineCoding;
 #define CDC_getBAUD()   (CDC_lineCoding.baudrate)

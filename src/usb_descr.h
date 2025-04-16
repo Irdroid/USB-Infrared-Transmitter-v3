@@ -29,7 +29,7 @@
 
 #define EP0_BUF_SIZE    EP_BUF_SIZE(EP0_SIZE)
 #define EP1_BUF_SIZE    EP_BUF_SIZE(EP1_SIZE)
-#define EP2_BUF_SIZE    EP_BUF_SIZE(EP2_SIZE) + 64
+#define EP2_BUF_SIZE    EP_BUF_SIZE(EP2_SIZE) + 192
 #define EP_BUF_SIZE(x)  (x+2<64 ? x+2 : 64)
 
 #define EP0_ADDR        0

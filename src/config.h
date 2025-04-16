@@ -9,7 +9,7 @@
 #define PIN_SCL             P17       // I2C SCL
 #define PIN_PWM             P34       // PWM pin
 #define SOFT_PWM_MIN_PER    0.000000167F// minimum timer tick for soft PWM
-#define SOFT_PWM
+//#define SOFT_PWM
 #define SPWM_DRIFT          19         // We observe 3us PWM Drift, this is correction constant
 
 #ifdef SOFT_PWM
