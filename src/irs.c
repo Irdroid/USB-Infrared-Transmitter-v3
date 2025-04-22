@@ -200,25 +200,6 @@ void GetUsbIrdroidVersion(void) {
 }
 
 void irsSetup(void) {
-   
-    /*
-     * PWM registers configuration CH552
-     * Fosc = 24000000 Hz
-     * Fpwm = Fosc / 256 / PWM_CK_SE
-     * Fpwm = 31.250 Hz (Requested : 38000 Hz)
-     * Duty Cycle = 50 %
-     * 
-     * When using the hardware pwm module it seems, that
-     * it is not possible to set the PWM carrier freq to
-     * 38KHz, therefore this can be achieved using a timer,
-     * and a GPIO pin, that way we can be more flexible setting
-     * the correct PWM frequency
-     * 
-     * We have two options, one is the hardware PWM module,
-     * the second is the implemented soft PWM, using timer 1.
-     */ 
-     //setup for IR RX
-
     irS.rxflag1 = 0;
     irS.rxflag2 = 0;
     irS.txflag = 0;
@@ -293,6 +274,7 @@ unsigned char irsService(void)
                                             CDC_writePointer += sizeof(uint8_t); // Increment the write counter
                                             CDC_flush(); // flush the buffer 
                                             fast_usb_handler(); 
+                                            fast_usb_handler(); 
                                         }                  
                                     
                                 for (i = 0; i < irS.TXsamples; i += 2, OutPtr += 2) {
@@ -307,7 +289,7 @@ unsigned char irsService(void)
                                         irIOstate = I_LAST_PACKET;
                                         i = irS.TXsamples;
                                         *(OutPtr + 1) = 0; // JTR3 replace 0xFFFF with 0020 (Ian's value)
-                                        *(OutPtr) = 20;
+                                        *(OutPtr) = 40;
                                         // Check if this need to be here
                                         CDC_readByteCount = 0;
                                     }
@@ -368,10 +350,9 @@ unsigned char irsService(void)
                             cdc_In_buffer[2] = (txcnt & 0xff);
                             CDC_writePointer += 3;
                             CDC_flush(); // flush the buffer 
-                            //USB_interrupt();
                         }
                         while (irS.txflag == 1){
-                            //USB_interrupt();
+                            fast_usb_handler(); 
                         }
                         LedOff();
                         if (irS.sendfinish) { // Really redundant giving we can send a count above.

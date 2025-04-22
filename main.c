@@ -46,12 +46,14 @@
 #ifdef DEBUG
 __xdata uint8_t dbg_buff[20];
 #endif
+extern uint8_t CDC_readPointer;     // data pointer for fetching
+extern uint16_t *timer1_pwm_ptr;
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
   USB_interrupt();
 }
-
+extern uint16_t timer1_pwm_val;
 /** @brief Timer0 Interrupt routine */
 void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
 { 
@@ -77,38 +79,55 @@ void SetUpDefaultMainMode(void) {
 // ===================================================================================
 // Main Function
 // ===================================================================================
-
 void main(void) {
-  // Setup
+  // Setup 
   CLK_config();                           // configure system clock
-  DLY_ms(10);                              // wait for clock to stabilize
-  CDC_init();                             // init the USB CDC
+  DLY_ms(10);                            // wait for clock to stabilize
+  CDC_init();                             // init the USB CDC  
   #ifdef DEBUG
   OLED_init();                          // Init the oled display/debugging  
   #endif
   SetUpDefaultMainMode();                 // Setup default main mode
   PIN_low(PIN_PWM); 
-   #ifndef SOFT_PWM   
-    PWM_CK_SE = 3;
-    PIN_output(PIN_PWM); 
-    // Bring the pwm pin off/IR LED off
-    PIN_low(PIN_PWM); 
-    // Setup the PWM Duty cycle to 50%
-    PWM_write(PIN_PWM, PWM_DUTY_50);  
-    #else
-    // Configure Soft PWM for 38KHz carrier
-    PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
-    #endif
-    // Setup Timer0 & enable the interrupts
-    EA  = 1;            /* Enable global interrupt */
-    ET0 = 0;            /* Enable timer0 interrupt */
-    TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
-    /* By default we are running 24MHz system clock and 2MHz timer clock */
-    #ifdef TIMER_CLOCK_FAST
-    T2MOD =0b00010000; /* Divide the system clock by 4 */
-    #else
-    T2MOD = bT1_CLK; /* Divide the system clock by 12 */
-    #endif
+/*
+    * PWM registers configuration CH552
+    * Fosc = 24000000 Hz
+    * Fpwm = Fosc / 256 / PWM_CK_SE
+    * Fpwm = 31.250 Hz (Requested : 38000 Hz)
+    * Duty Cycle = 50 %
+    * 
+    * When using the hardware pwm module it seems, that
+    * it is not possible to set the PWM carrier freq to
+    * 38KHz, therefore this can be achieved using a timer,
+    * and a GPIO pin, that way we can be more flexible setting
+    * the correct PWM frequency
+    * 
+    * We have two options, one is the hardware PWM module,
+    * the second is the implemented soft PWM, using timer 1.
+    */ 
+    //setup for IR RX
+  #ifndef SOFT_PWM   
+  PWM_CK_SE = 3;
+  PIN_output(PIN_PWM); 
+  // Bring the pwm pin off/IR LED off
+  PIN_low(PIN_PWM); 
+  // Setup the PWM Duty cycle to 50%
+  PWM_write(PIN_PWM, PWM_DUTY_50);  
+  #else
+  // Configure Soft PWM for 38KHz carrier
+  PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
+  #endif
+  // Setup Timer0 & enable the interrupts
+  EA  = 1;            /* Enable global interrupt */
+  ET0 = 0;            /* Enable timer0 interrupt */
+  TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
+  /* By default we are running 24MHz system clock and 2MHz timer clock */
+  #ifdef TIMER_CLOCK_FAST
+  T2MOD =0b00010000; /* Divide the system clock by 4 */
+  #else
+  T2MOD = bT1_CLK; /* Divide the system clock by 12 */
+  #endif
+  CDC_readPointer = 0;
   // Main loop
   while(1) {
     
