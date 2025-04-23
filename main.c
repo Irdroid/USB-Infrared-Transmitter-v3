@@ -133,6 +133,9 @@ void main(void) {
     
     switch (mode)
     {
+      case IR_S:
+        if (irsService() != 0) SetUpDefaultMainMode();
+        break;
       case IR_MAIN:
         if(CDC_available()) {       // something coming in?
           
@@ -157,9 +160,6 @@ void main(void) {
         }
         break;
       }
-      case IR_S:
-        if (irsService() != 0) SetUpDefaultMainMode();
-        break;
       default:
         break;
       
