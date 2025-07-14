@@ -49,6 +49,10 @@ The above features and its price made it the perfect candidate for the project.
 ## CH552 SDK
 The MCU could be programmed in C and it comes with a SDK (with some examples) for the SDCC compiler. The build system used is GNU Make.
 
+## PURCHASE a SAMPLE UNIT
+If you want to support us or you are interested in the product, purchase assembled and tested unit by clicking on the link below:
+[Purchase a sample from Irdroid](https://irdroid.eu/product/usb-infrared-transmitter/)
+
 ## Instructions for usage of the code
 
     - Install the SDCC compiler on Linux - apt install sdcc
