@@ -1,4 +1,4 @@
-# Irdroid USB Infrared Transmitter (Hardware version 3.0)
+# Irdroid USB Infrared Transmitter v3
 
 ![USB Infrared Transmitter v3](https://raw.githubusercontent.com/Irdroid/USB-Infrared-Transmitter-v3/refs/heads/master/Hardware/Pictures/black3%20(Medium).png)
 
