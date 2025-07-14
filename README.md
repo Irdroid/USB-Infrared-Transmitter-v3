@@ -53,6 +53,9 @@ The MCU could be programmed in C and it comes with a SDK (with some examples) fo
 If you want to support us or you are interested in the product, purchase assembled and tested unit by clicking on the link below:
 [Purchase a sample from Irdroid](https://irdroid.eu/product/usb-infrared-transmitter/)
 
+Or purchase from Tindie:
+[Purchase a sample from Tindie](https://www.tindie.com/products/irdroid/usb-infrared-transmitter-v3/)
+
 ## Instructions for usage of the code
 
     - Install the SDCC compiler on Linux - apt install sdcc
