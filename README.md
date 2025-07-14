@@ -1,6 +1,6 @@
 # Irdroid USB Infrared Transmitter (Hardware version 3.0)
 
-![USB Infrared Transmitter v3](https://raw.githubusercontent.com/Irdroid/trx_v3/refs/heads/master/Hardware/Pictures/black5%20(Medium).png?token=GHSAT0AAAAAADHKJ2AQDZWZGJRTQG3HPC2Y2DU4MQA)
+![USB Infrared Transmitter v3](https://[raw.githubusercontent.com/Irdroid/trx_v3/refs/heads/master/Hardware/Pictures/black5%20(Medium).png?token=GHSAT0AAAAAADHKJ2AQDZWZGJRTQG3HPC2Y2DU4MQA](https://raw.githubusercontent.com/Irdroid/USB-Infrared-Transmitter-v3/refs/heads/master/Hardware/Pictures/black3%20(Medium).png))
 
 The Irdroid USB Infrared transmitter device provides infrared remote control capabilities for the host computer. It is supported in Linux , MS Windows and Android. It is capable of controlling appliances such as TVs, STBs, Air Conditioners and basically any device that is controlled via infrared signals.
 ### Motivation
