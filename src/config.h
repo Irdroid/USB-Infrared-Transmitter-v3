@@ -10,14 +10,16 @@
 #define PIN_PWM             P34       // PWM pin
 #define SOFT_PWM_MIN_PER    0.000000167F// minimum timer tick for soft PWM
 #define SOFT_PWM
-#define SPWM_DRIFT          19         // We observe 3us PWM Drift, this is correction constant
+#define SPWM_DRIFT          19        // We observe 3us PWM Drift, this is correction constant
+#define IRTOY_FREQ 48000000           // Irtoy Xtal frequency
+#define IRTOY_MULTIPLIER 16           // Irtoy multiplier for the Xtal
 
 #ifdef SOFT_PWM
 #define PWM_FREQ            31250     // PWM Carrier is 38KHz
 #endif
 // USB device descriptor
-#define USB_VENDOR_ID       0x4d8    // VID Irdroid
-#define USB_PRODUCT_ID      0xf58b   // PID Irdroid 
+#define USB_VENDOR_ID       0x4d8     // VID Irdroid
+#define USB_PRODUCT_ID      0xf58b    // PID Irdroid 
 #define USB_DEVICE_VERSION  0x0300    // v1.0 (BCD-format)
 
 // USB configuration descriptor
@@ -27,5 +29,5 @@
 #define MANUFACTURER_STR    'H','a','r','d','w','a','r','e',' ','G','r','o','u','p',' ','L','T','D'
 #define PRODUCT_STR         'U','S','B',' ','I','n','f','r','a','r','e','d',' ','T','r','a','n','s' \
                             ,'c','e','i','v','e','r'
-#define SERIAL_STR          '3','2','0'
+#define SERIAL_STR          '3','4','2'
 #define INTERFACE_STR       'C','D','C',' ','S','e','r','i','a','l'

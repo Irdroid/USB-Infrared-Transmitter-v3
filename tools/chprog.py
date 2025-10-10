@@ -40,9 +40,14 @@
 # Run "python3 chprog.py firmware.bin".
 
 
+import os
 import usb.core
 import usb.util
 import sys
+import subprocess
+import time
+from getpass import getpass
+from subprocess import Popen, PIPE
 
 
 # ===================================================================================
@@ -55,6 +60,17 @@ def _main():
         sys.exit(1)
 
     try:
+        wd = os.getcwd()
+        os.chdir(wd)
+        print('Requires sudo, to access /dev/lirc0')
+        password = getpass("Please enter your password: ")
+        # sudo requires the flag '-S' in order to take input from stdin
+        proc = Popen(['sudo',  wd + '/tools/irdroid_bl', '/dev/lirc0'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        # Popen only accepts byte-arrays so you must encode the string
+        proc.communicate(password.encode())
+        print('Jump to bootloader...')
+        time.sleep(3)
+        #subprocess.Popen('sudo irdroid_bt /dev/lirc0', shell=True)
         print('Connecting to device ...')
         isp = Programmer()
         isp.detect()
@@ -81,6 +97,7 @@ def _main():
 
 class Programmer:
     def __init__(self):
+
         # Find device
         dev = usb.core.find(idVendor = CH_USB_VENDOR_ID, idProduct = CH_USB_PRODUCT_ID)
         if dev is None:

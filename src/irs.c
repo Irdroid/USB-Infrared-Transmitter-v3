@@ -10,6 +10,7 @@
 #include "src/irs.h"
 #include "common.h"
 #include "stdbool.h"
+#include "system.h"
 
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;
@@ -151,6 +152,17 @@ static inline void align_irtoy_ch552(uint8_t timer_h, uint8_t timer_l, uint8_t *
     *buf = time_val;
 }
 
+/** @brief Calculate the IR Tx Carrier frequency in HZ, coming from the host.
+ * When the host sends a 0x06 command, e.g. set PWM frequency, the next octet,
+ * after the command is the actual PWM setting, we get this value and then use 
+ * the PwmConfigure function to set PWM period as appropriate.
+ * 
+ * @param[in] pwm_setting - the PWM setting coming from the host
+ */
+static inline uint16_t irtoy_pwm_to_hz(uint8_t pwm_setting){
+    return (uint16_t)((IRTOY_FREQ/(pwm_setting+1))/IRTOY_MULTIPLIER);
+}
+
 void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
     //calculate the timer value that we need to set
     // timer1_pwm_val (half period duration) = (1/freq / 1/Timer_clock) / 2
@@ -179,9 +191,6 @@ unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
         for (int i=0; i < len; i++){
              buffer[i] = CDC_read_b();
         }
-       }
-       if(len == 3 && buffer[0]==0x06){
-        len =0;
        }
     return len;
     }
@@ -406,14 +415,25 @@ unsigned char irsService(void)
                     case IRIO_RETURNTXCNT:
                         irS.sendcount = 1;
                         break;
-                        // JTR3 End of new commands
                     case IRIO_SETUP_PWM:
+                        TxBuffCtr++;
+						/* Check if we have a command to jump to the bootloader */
+                        if(irToy.s[TxBuffCtr] == 0xff){
+                        	DBG("BOOT");
+                        	WDT_start();
+                        	while(1); 
+                        }else{
+							/** Convert Irtoy PWM setting to HZ */
+							uint16_t freq = irtoy_pwm_to_hz(irToy.s[TxBuffCtr]);
+							DBG("Frequency(Hz): %u\n", freq)
+							/* Configure the software PWM setting for the desired frequency */
+							PwmConfigure(freq, timer1_pwm_ptr);
+						}
                         irS.TXsamples -=2;
-                        TxBuffCtr +=3;
                         break;
                     case CUSTOM_FF:
                         LedOff();
-                        //DBG("IR Reset %x\n", irToy.s[TxBuffCtr]);
+                        DBG("IR Reset %x\n", irToy.s[TxBuffCtr]);
                         return 1; //need to flag exit!
                     default:
                         break;

@@ -38,7 +38,7 @@
 #include "src/usb_cdc.h"                  // for USB-CDC serial
 #include "src/oled_term.h"                // for OLED
 #include "src/irs.h"                      // IR sampling routines
-#include "src/hwprofile.h"                  // Hardware profile
+#include "src/hwprofile.h"                // Hardware profile
 #include "src/dataflash.h"
 #include "usb_cdc.h"
 #include "src/common.h"
@@ -81,14 +81,22 @@ void SetUpDefaultMainMode(void) {
 // ===================================================================================
 void main(void) {
   // Setup 
-  CLK_config();                           // configure system clock
-  DLY_ms(10);                            // wait for clock to stabilize
-  CDC_init();                             // init the USB CDC  
+  CLK_config();                         // configure system clock
+  DLY_ms(10);                           // wait for clock to stabilize
+  CDC_init();                           // init the USB CDC  
   #ifdef DEBUG
   OLED_init();                          // Init the oled display/debugging  
   #endif
-  SetUpDefaultMainMode();                 // Setup default main mode
-  PIN_low(PIN_PWM); 
+  SetUpDefaultMainMode();               // Setup default main mode
+  PIN_low(PIN_PWM);
+  
+  /* This gives us information if we got a
+   * command to jump to the bootloader */
+  if(RST_wasWDT()){
+    DBG("SW Reset");
+    BOOT_now();
+  }
+   
 /*
     * PWM registers configuration CH552
     * Fosc = 24000000 Hz
@@ -130,29 +138,25 @@ void main(void) {
   CDC_readPointer = 0;
   // Main loop
   while(1) {
-    
+
     switch (mode)
     {
       case IR_S:
         if (irsService() != 0) SetUpDefaultMainMode();
         break;
       case IR_MAIN:
-        if(CDC_available()) {       // something coming in?
-          
+        if(CDC_available()) {  // something coming in?
           char byte = CDC_read_b(); // read the character ...  
           
           switch (byte)
           {
-
               case 'S': //IRIO Sampling Mode
               case 's': 
-                  
                   irsSetup();
                   mode = IR_S;
                   break;
               case 'V':
               case 'v':// Acquire Version
-              DBG("v");
                   GetUsbIrdroidVersion();
                   break;
               default:
@@ -162,7 +166,6 @@ void main(void) {
       }
       default:
         break;
-      
     }    
   }
 }
