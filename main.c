@@ -48,6 +48,9 @@ __xdata uint8_t dbg_buff[20];
 #endif
 extern uint8_t CDC_readPointer;     // data pointer for fetching
 extern uint16_t *timer1_pwm_ptr;
+/** References to the CDC in and out buffers */
+register uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
+register uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+128; 
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
@@ -59,7 +62,6 @@ void timer0_interrupt(void) __interrupt(INT_NO_TMR0)
 { 
   timer0_int_callback(); 
 }
-
 /** @brief Timer1 Interrupt routine */
 void timer1_interrupt(void) __interrupt(INT_NO_TMR1)   
 { 
@@ -125,16 +127,26 @@ void main(void) {
   // Configure Soft PWM for 38KHz carrier
   PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
   #endif
-  // Setup Timer0 & enable the interrupts
-  EA  = 1;            /* Enable global interrupt */
-  ET0 = 0;            /* Enable timer0 interrupt */
-  TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
+  // configure the IRRX pin as input, pulled up (this is INT0 pin)
+  PIN_input_PU(IRRX); 
+  // Setup the timer0 Gated by Int0, when int0 becomes high, timer is started
+  TMOD |= bT0_M0 | bT1_M0 | bT0_GATE ;   /* Run in time mode not counting */ 
   /* By default we are running 24MHz system clock and 2MHz timer clock */
   #ifdef TIMER_CLOCK_FAST
   T2MOD =0b00010000; /* Divide the system clock by 4 */
   #else
-  T2MOD = bT1_CLK; /* Divide the system clock by 12 */
+  T2MOD =0b00000000; /* Divide the system clock by 12 */
+  T2MOD |= bT1_CLK ;
   #endif
+
+	EA  = 1;     /* Enable global interrupt */
+  EX0 = 1;    // Enable INT0
+  
+  /** INT0 is edge triggered, this means that it will be active on
+   * each falling edge of the signal comming from the ir receiver
+   * */
+  IT0 = 1;    // INT0 is edge triggered
+  ET0 = 1; // Disable Timer 0 interrupt
   CDC_readPointer = 0;
   // Main loop
   while(1) {
@@ -166,6 +178,7 @@ void main(void) {
       }
       default:
         break;
-    }    
+    }   
+     
   }
 }

@@ -7,6 +7,7 @@
 #include "src/pwm.h"                      // for PWM Code
 #include "src/gpio.h"                     // for GPIO
 #include "src/hwprofile.h"          // Definitions hw specific
+#include "ch554.h"
 
 /** Constant that we use to multiply the values coming from th USB host to 
  * match the irtoy time unit*/
@@ -91,10 +92,13 @@ unsigned char irsService(void);
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len);
 
 /** @brief Timer0 Interrupt callback routine */
-void timer0_int_callback(void);  
+inline void timer0_int_callback(void);  
 
 /** @brief Timer1 Interrupt callback routine */
-void timer1_int_callback(void);  
+inline void timer1_int_callback(void);  
+
+extern void ext0_interrupt(void)__interrupt(INT_NO_INT0);
+
 
 /** @brief This functions is used to configure a PWM-like output on
  *  one of the GPIO pins e.g Soft PWM
