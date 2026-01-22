@@ -150,7 +150,7 @@ void timer0_int_callback(void)
   //TR2 = 0;
   // Read Timer2 readings and substact space to get the pulse value
   pulse = ((TH2 << 8) | TL2);
-  pulse = _divuint(pulse, 43);
+  pulse = _divuint(pulse, TIMER_0_CONST);
   // Put it into the CDC buffer
   *cdc_In_buffer++ = (pulse >> 8) & 0xff;
   *cdc_In_buffer++ = pulse;
@@ -585,8 +585,8 @@ unsigned char irsService(void)
     rxflag1 = false;
       // Divide by this constant to achieve irtoy time unit
       // and report measurements to the host as if it is the irtoy hardware 
-      pulse = _divuint(pulse, 43);
-      space = _divuint(space, 43);
+      pulse = _divuint(pulse, TIMER_0_CONST);
+      space = _divuint(space, TIMER_0_CONST);
       *cdc_In_buffer++ = (pulse >> 8) & 0xff;
       *cdc_In_buffer++ = pulse;
       *cdc_In_buffer++ = (space >> 8) & 0xff;

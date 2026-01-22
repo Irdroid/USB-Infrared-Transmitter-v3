@@ -8,7 +8,7 @@
 #include "src/gpio.h"                     // for GPIO
 #include "src/hwprofile.h"          // Definitions hw specific
 #include "ch554.h"
-
+#define TIMER_CLOCK_FAST
 /** Constant that we use to multiply the values coming from th USB host to 
  * match the irtoy time unit*/
 #ifdef TIMER_CLOCK_FAST

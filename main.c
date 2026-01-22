@@ -133,7 +133,8 @@ void main(void) {
   TMOD |= bT0_M0 | bT1_M0 | bT0_GATE ;   /* Run in time mode not counting */ 
   /* By default we are running 24MHz system clock and 2MHz timer clock */
   #ifdef TIMER_CLOCK_FAST
-  T2MOD =0b00010000; /* Divide the system clock by 4 */
+  //T2MOD =0b00010000; /* Divide the system clock by 4 */
+  T2MOD |= bT1_CLK | bT0_CLK | bT2_CLK;
   #else
   T2MOD =0b00000000; /* Divide the system clock by 12 */
   T2MOD |= bT1_CLK ;
