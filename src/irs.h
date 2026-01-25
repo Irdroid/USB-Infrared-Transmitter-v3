@@ -7,8 +7,8 @@
 #include "src/pwm.h"                      // for PWM Code
 #include "src/gpio.h"                     // for GPIO
 #include "src/hwprofile.h"          // Definitions hw specific
+#include "src/timers.h"
 #include "ch554.h"
-#define TIMER_CLOCK_FAST
 /** Constant that we use to multiply the values coming from th USB host to 
  * match the irtoy time unit*/
 #ifdef TIMER_CLOCK_FAST
@@ -96,6 +96,9 @@ inline void timer0_int_callback(void);
 
 /** @brief Timer1 Interrupt callback routine */
 inline void timer1_int_callback(void);  
+
+/** @brief Timer2 Interrupt callback routine */
+inline void timer2_int_callback(void);  
 
 extern void ext0_interrupt(void)__interrupt(INT_NO_INT0);
 

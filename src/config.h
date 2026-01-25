@@ -30,5 +30,5 @@
 #define MANUFACTURER_STR    'H','a','r','d','w','a','r','e',' ','G','r','o','u','p',' ','L','T','D'
 #define PRODUCT_STR         'U','S','B',' ','I','n','f','r','a','r','e','d',' ','T','r','a','n','s' \
                             ,'c','e','i','v','e','r'
-#define SERIAL_STR          '3','4','2'
+#define SERIAL_STR          '3','5','2'
 #define INTERFACE_STR       'C','D','C',' ','S','e','r','i','a','l'

@@ -5,23 +5,17 @@
 // Author:    Georgi Bakalski
 // Github:    https://github.com/irdroid
 // License:   http://creativecommons.org/licenses/by-sa/3.0/
-// File:      irs.c Samling routines
+// File:      irs.c Sampling routines (Transmission and Reception)
 // ===================================================================================
 #include "src/irs.h"
 #include "common.h"
 #include "stdbool.h"
 #include "system.h"
 #include "delay.h"
-uint8_t count = 0;
-uint16_t ticks = 0;
 /** The CDC EP2 read pointer */
 extern volatile __bit CDC_EP2_readPointer;
 /** The CDC EP2 write pointer */
 extern volatile __xdata uint8_t CDC_writePointer;
-/** IR Receive flag */
-__xdata bool rxflag1 = false;
-__xdata bool rxflag = false;
-bool first = false;
 
 /** References to the CDC in and out buffers */
 extern uint8_t * cdc_Out_buffer; 
@@ -32,14 +26,6 @@ uint8_t *OutPtr; // Same naming of this pointer as in the irtoy code
 static unsigned char TxBuffCtr; // Transmit buffer counter
 static unsigned char h, l, tmr0_buf[3]; // Timer0 buffer
 __xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
-// here we save the pulse-space values
-// of the captured IR signal
-__xdata uint16_t pulse;
-__xdata uint16_t space;
-__xdata uint16_t pulse1;
-__xdata uint16_t space1;
-// which buffer we are dealing with
-bool inWhichBuf = false;
 
 #define IRS_TRANSMIT_HI	0
 #define IRS_TRANSMIT_LO	1
@@ -51,12 +37,13 @@ __xdata uint16_t *timer1_pwm_ptr = &timer1_pwm_val;
 
 /** @brief A Structure, holding the Irdroid USB Infrared Transceiver IRs data */
 static struct {
-    unsigned char RXsamples;
+    uint16_t irSignal;
+    unsigned char gap : 1;
+    unsigned char t2_count;
     unsigned char TXsamples;
     unsigned char timeout;
     unsigned char TX : 1;
-    unsigned char rxflag1 : 1;
-    unsigned char rxflag2 : 1;
+    unsigned char rxflag : 1;
     unsigned char txflag : 1;
     unsigned char flushflag : 1;
     unsigned char overflow : 1;
@@ -67,15 +54,7 @@ static struct {
     unsigned char RXcompleted : 1;
 	unsigned char txerror : 1;
 } irS;
-static void whichBuff(void){
-  if(!inWhichBuf){
-    cdc_In_buffer = (uint8_t *) EP2_buffer+128;
-    inWhichBuf = true;
-  }else{
-    cdc_In_buffer = (uint8_t *) EP2_buffer+192;
-    inWhichBuf = false;
-  }
-}
+
 static void fast_usb_handler(void) {
   // USB transfer completed interrupt
   if(UIF_TRANSFER) {
@@ -105,12 +84,11 @@ static void fast_usb_handler(void) {
 /** @brief Timer0 Interrupt callback routine */
 void timer0_int_callback(void)   
 { 
-    //TR0 = 0; // Disable the timer
-    //TF0 = 0; // Clear Timer0 interrupt flag
+    TR0 = 0; // Disable the timer
+    TF0 = 0; // Clear Timer0 interrupt flag
       
       if (irS.TX == 1) {//timer0 interrupt means the IR transmit period is over
             ET0 = 0; // Disable Timer 0 interrupt
-
 			//in transmit mode, but no new data is available
             if (irS.txflag == 0) { 
 
@@ -118,6 +96,9 @@ void timer0_int_callback(void)
                 //disable the PWM, output ground
                 PWMoff();
                 LedOff();
+                IE0 = 0;    // Clear INT0 Flag
+                EX0 = 1;    // Enable INT0 (RX Mode)
+                IE0 = 0;    // Clear INT0 Flag
                 irS.TX = 0;
                 return;
             }
@@ -139,46 +120,19 @@ void timer0_int_callback(void)
             ET0 = 1; // Enable Timer 0 interrupt
             TR0 = 1; // Enable the timer
             irS.txflag = 0; //buffer ready for new byte
-
-        }else{
-         TR0 = 0;
-         TR2 = 0;
-         // Put it into the CDC buffer
-         //cdc_In_buffer = inWhich();
-          //TR0 = 0;
-  // Stop timer2
-  //TR2 = 0;
-  // Read Timer2 readings and substact space to get the pulse value
-  pulse = ((TH2 << 8) | TL2);
-  pulse = _divuint(pulse, TIMER_0_CONST);
-  // Put it into the CDC buffer
-  *cdc_In_buffer++ = (pulse >> 8) & 0xff;
-  *cdc_In_buffer++ = pulse;
-  // Increment the write pointer by 2 octets
-  CDC_writePointer += sizeof(uint16_t);
-            *cdc_In_buffer++ = 0xff;
-            *cdc_In_buffer++ = 0xff;
-            
-         //   // Increment the write pointer by 2 octets
-            CDC_writePointer += 2;
-            WaitInReady();
-            CDC_flush(); // flush the buffer
-            cdc_In_buffer = inWhich();
-         //   whichBuff();
-          //  count = 0;
-           
-        }  
+        }
 }
 
-/** @brief Timer1 Interrupt callback routine */
+/** @brief Timer1 Interrupt callback routine 
+ *  Timer1 is used for the SoftPWM functionality,
+ *  as well as a timeout to flush any pending data
+ *  to the USB host , when used in IR RX mode.
+*/
 void timer1_int_callback(void){
-    
+  
     if(irS.TX == 0){
-       
-        irS.flushflag = 1;
-        TH1 = 0;
-        TL1 = 0;
-        T1 = 0;
+      TR1 = 0;  // Disable Timer 1
+      irS.flushflag = true;
     }else{
     #ifdef SOFT_PWM
     PIN_toggle(PIN_PWM); // Toggle the PWM pin
@@ -186,64 +140,73 @@ void timer1_int_callback(void){
     TH1 = (*timer1_pwm_ptr >> 8) & 0xff;
     TL1 = *timer1_pwm_ptr;
     #endif
-    // TODO: Check if anything else is needed here
     }
+}
+static uint16_t calculateGap(void){
+    uint32_t timer_gap = irS.t2_count * 65535;
+    return _divuint(timer_gap, TIMER_0_CONST);
 } 
 
-void ext0_interrupt(void) __interrupt(INT_NO_INT0){
-    // If timer0 and timer2 are not turned on , turn them on
-    // this is the initial condition
-    if(TR0 == 0 && TR2 == 0){
-      // Zero Timer0 and Timer2 high and low regs
-      TH2 = 0;
-      TL2 = 0;
-      TH0=0;
-      TL0 = 0;
-      // Prepare Timer0 to start when INT0 is low
-      TR0 = 1;
-      // Start Timer2
-      TR2 = 1;
-
-      TH1 = 0;
-      TL1 = 0;
-      ET1 = 1;
-      TR1 = 1;
-     
-            
-    }else{
-      // Stop timer0
-      //TR0 = 0;
-      // Stop timer2
-      //TR2 = 0;
-      //reset timer1, USB packet send timeout
-      TR1 = 0; //timer off
-      TH1 = 0;
-      TL1 = 0;
-      ET1 = 1;
-      TR1 = 1; //timer on
-      if(!rxflag1){
-        
-        // Read Timer0 readings , this is the IR signal space
-        space = (TH0 << 8) | TL0;
-        // Read Timer2 readings and substact space to get the pulse value
-        pulse = ((TH2 << 8) | TL2) - space;
-        rxflag1 = true;
-      }else{
-        // overflow
-        DBG("ovf\n");
-      }
-      // Now we have to zero TH0, TL0, TH2 and TL2
-      TH0 = 0;
-      TL0 = 0;
-      TH2 = 0;
-      TL2 = 0;
-      // And now we have to write TR0 = 1 and TR2 = 1;
-      // Eg. preparing for the next pulse-space cycle
-      // Timer0 will start after the INT0 is raised,
-      // Timer 2 will start immediatly
-      //TR0=1;
-      //TR2=1;
+/** Timer 2 Interrupt Service Routine 
+ *  Timer is used to measure the IR pulse-space
+ *  signal period in IR RX mode.
+*/
+void timer2_int_callback(void){
+    if (TF2) {              // Did Timer2 overflowed?
+        TF2 = 0;            // Clear overflow flag
+        if(EX0 == 0){       // If we have timed out, enable INT0 IRQ
+          EX0 = 1;
+        }
+        irS.t2_count++;         // Increase the counter
+        if (irS.t2_count >= 43){// 32ms * 50 = 1600ms
+            irS.t2_count = 0;
+            irS.RXcompleted = 1;// Flag for main loop, send packet terminator
+        }
     }
+    if (EXF2 && irS.t2_count == 0) {             // Check if capture was triggered by T2EX edge
+        EXF2 = 0;           // Clear the external flag 
+        if(EX0 == 1){
+            EX0 = 0;
+        }
+            irS.irSignal = 0;
+            // Read captured 16-bit value from RCAP2 registers
+            irS.irSignal = (RCAP2H << 8) | RCAP2L;
+            // signal the main loop that we have pending data
+            if(irS.irSignal!=0){
+            irS.rxflag = true;
+            }
+        
+        // Restart Timer 1
+        RestartTimer1();
+        // Reset timer to 0 to measure period between pulses
+        TH2 = 0;
+        TL2 = 0;
+    }else if (EXF2 && irS.t2_count != 0){
+        EXF2 = 0;           // Clear the external flag 
+        if(EX0 == 1){
+            EX0 = 0;
+        }
+            irS.irSignal = 0;
+            irS.irSignal = (RCAP2H << 8) | RCAP2L;
+            irS.irSignal = _divuint(irS.irSignal, TIMER_0_CONST) + calculateGap();
+             // signal the main loop that we have pending data
+            if(irS.irSignal!=0){
+            irS.gap = 1;
+            }
+        irS.t2_count = 0;
+        // Reset timer to 0 to measure period between pulses
+        TH2 = 0;
+        TL2 = 0;
+    }
+}
+
+/** The EXT0 pin and pin 1.1 are wire together with,
+ *  the IR Receiver, so that we have a way to turn on Timer2 
+ *  when we have a pin edge change
+ */
+void ext0_interrupt(void) __interrupt(INT_NO_INT0){
+    ENABLE_TIMER2();
+    cdc_In_buffer = inWhich(); 
 }
 // ============================================================================
 // Function Definitions
@@ -293,7 +256,6 @@ void PwmConfigure(uint16_t freq, uint16_t *timer1_pwm_val){
 }
 
 unsigned char getUnsignedCharArrayUsbUart(uint8_t *buffer, uint8_t len){
-   
    if(CDC_available())
     {    
        // DBG("count %d\n", CDC_readByteCount);
@@ -323,14 +285,12 @@ void GetUsbIrdroidVersion(void) {
 }
 
 void irsSetup(void) {
-    irS.rxflag1 = 0;
-    inWhichBuf = true;
-    first = true;
-    irS.rxflag2 = 0;
+    irS.rxflag = 0;
     irS.txflag = 0;
     irS.flushflag = 0;
     irS.timeout = 0;
-    irS.RXsamples = 0;
+    irS.t2_count = 0;
+    irS.irSignal = 0;
     irS.TXsamples = 0;
     irS.TX = 0;
     irS.overflow = 0;
@@ -345,15 +305,8 @@ void irsSetup(void) {
     cdc_In_buffer[2] = '1';
     CDC_writePointer += 3;
     CDC_flush(); 
-    //ET1 = 1;
-    cdc_In_buffer = inWhich();
-     if(cdc_In_buffer == ((uint8_t *) EP2_buffer+128)){
-                    inWhichBuf = true;
-                }else{
-                    inWhichBuf = false;
-                }
-    whichBuff();
-   
+    while(CDC_writeBusyFlag);
+    cdc_In_buffer = inWhich(); 
 }
 
 unsigned char irsService(void)
@@ -361,10 +314,7 @@ unsigned char irsService(void)
     static _smio irIOstate = I_IDLE;
     static unsigned int txcnt = 0;
     static unsigned char i = 0;
-    if(first){
-        CDC_flush();
-        first = false;
-    }
+
     if (irS.TXsamples == 0) {
         irS.TXsamples = getUnsignedCharArrayUsbUart(irToy.s, MAX_PACKET_SIZE);
         TxBuffCtr = 0;
@@ -380,7 +330,11 @@ unsigned char irsService(void)
                         ET0 = 0; // Disable Timer 0 interrupt
                         TR0 = 0; //enable the timer
                         irS.TX = 0;
-                        
+                        PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
+                        ConfigTimer1(T1_CLK_DIV12);
+                        EX0 = 0;
+                        DISABLE_TIMER2();
+                        EXF2 = 0;
                         irS.txflag = 0; //transmit flag =0 reset the transmit flag
                         irIOstate = I_TX_STATE; //change to transmit data processing state
 						tmr0_buf[2]=0x00; //last data packet flag
@@ -504,12 +458,7 @@ unsigned char irsService(void)
                         }
                         
                         irS.TXsamples = 1; //will be zeroed at end, super hack yuck!  //JTR3 super yuck!
-                         cdc_In_buffer = inWhich();
-                if(cdc_In_buffer == ((uint8_t *) EP2_buffer+128)){
-                    inWhichBuf = false;
-                }else{
-                    inWhichBuf = true;
-                }
+                       
                         break;
                     
                     case IRIO_RESET: //reset, return to RC5 (same as SUMP)
@@ -562,7 +511,7 @@ unsigned char irsService(void)
 							uint16_t freq = irtoy_pwm_to_hz(irToy.s[TxBuffCtr]);
 							DBG("Frequency(Hz): %u\n", freq)
 							/* Configure the software PWM setting for the desired frequency */
-							PwmConfigure(freq, timer1_pwm_ptr);
+						//	PwmConfigure(freq, timer1_pwm_ptr);
 						}
                         irS.TXsamples -=2;
                         break;
@@ -575,38 +524,46 @@ unsigned char irsService(void)
                 }
                 irS.TXsamples--;
                 TxBuffCtr++;
-               
             break;
         }   
     
     }
     // If we have pulse-space measuremnts available, put them in the CDC buffer
-    if(rxflag1){
-    rxflag1 = false;
-      // Divide by this constant to achieve irtoy time unit
-      // and report measurements to the host as if it is the irtoy hardware 
-      pulse = _divuint(pulse, TIMER_0_CONST);
-      space = _divuint(space, TIMER_0_CONST);
-      *cdc_In_buffer++ = (pulse >> 8) & 0xff;
-      *cdc_In_buffer++ = pulse;
-      *cdc_In_buffer++ = (space >> 8) & 0xff;
-      *cdc_In_buffer++ = space;
-      CDC_writePointer += sizeof(uint32_t);
-      
+    if(irS.rxflag == 1){
+      irS.rxflag = 0;
+      irS.irSignal = _divuint(irS.irSignal,TIMER_0_CONST);
+      if(irS.irSignal!=0){
+      *cdc_In_buffer++ = (irS.irSignal >> 8) & 0xff;
+      *cdc_In_buffer++ = irS.irSignal;
+      CDC_writePointer += sizeof(uint16_t);
+      }
+    }
+    if(irS.gap == 1){
+        irS.gap = 0;
+       *cdc_In_buffer++ = (irS.irSignal >> 8) & 0xff;
+       *cdc_In_buffer++ = irS.irSignal;
+       CDC_writePointer += sizeof(uint16_t); 
     }
     if(CDC_writePointer == MAX_PACKET_SIZE){
-        WaitInReady();
         CDC_flush(); // flush the buffer
         while(CDC_writeBusyFlag);
-        cdc_In_buffer = inWhich();
+        cdc_In_buffer = inWhich(); 
     }
     if(irS.flushflag == 1){
-        irS.flushflag = 0;
-        ET1 = 0;
-        WaitInReady();
-        CDC_flush(); // flush the buffer
-        while(CDC_writeBusyFlag);
-        cdc_In_buffer = inWhich();
+      // Flush any pending bytes in the USB send buffer
+      irS.flushflag = 0;
+      CDC_flush(); // flush the buffer
+      while(CDC_writeBusyFlag);
+      cdc_In_buffer = inWhich(); 
     }
+    if(irS.RXcompleted == 1){
+      irS.RXcompleted = 0;
+      DISABLE_TIMER2();
+      // RX is completed, send the packet terminator
+      *cdc_In_buffer++ = 0xFF;
+      *cdc_In_buffer++ = 0xFF;
+      CDC_writePointer += sizeof(uint16_t);
+      CDC_flush(); // flush the buffer
+    } 
     return 0;
 }
