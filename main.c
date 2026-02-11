@@ -47,23 +47,27 @@
 __xdata uint8_t dbg_buff[20];
 #endif
 extern uint8_t CDC_readPointer;     // data pointer for fetching
-extern uint16_t *timer1_pwm_ptr;
+/** References to the CDC in and out buffers */
+register uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
+register uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+128; 
 // Prototypes for used interrupts
 void USB_interrupt(void);
 void USB_ISR(void) __interrupt(INT_NO_USB) {
   USB_interrupt();
 }
-extern uint16_t timer1_pwm_val;
 /** @brief Timer0 Interrupt routine */
 void timer0_interrupt(void) __interrupt(INT_NO_TMR0)   
 { 
   timer0_int_callback(); 
 }
-
 /** @brief Timer1 Interrupt routine */
 void timer1_interrupt(void) __interrupt(INT_NO_TMR1)   
 { 
   timer1_int_callback(); 
+}
+/** Timer 2 Interrupt Service Routine (Vector 5) */
+void Timer2_ISR(void) __interrupt (INT_NO_TMR2) {
+  timer2_int_callback(); 
 }
 
 static enum _mode {
@@ -121,24 +125,25 @@ void main(void) {
   PIN_low(PIN_PWM); 
   // Setup the PWM Duty cycle to 50%
   PWM_write(PIN_PWM, PWM_DUTY_50);  
-  #else
-  // Configure Soft PWM for 38KHz carrier
-  PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
   #endif
-  // Setup Timer0 & enable the interrupts
-  EA  = 1;            /* Enable global interrupt */
-  ET0 = 0;            /* Enable timer0 interrupt */
-  TMOD = bT1_M0 | bT0_M0;   /* Run in time mode not counting T0/T1 */ 
-  /* By default we are running 24MHz system clock and 2MHz timer clock */
-  #ifdef TIMER_CLOCK_FAST
-  T2MOD =0b00010000; /* Divide the system clock by 4 */
-  #else
+  // configure the IRRX pin as input, pulled up (this is INT0 pin)
+  PIN_input_PU(IRRX); 
+  // Setup the timer0 Gated by Int0, when int0 becomes high, timer is started
+  TMOD |= bT0_M0 | bT1_M0;   /* Run in time mode not counting */ 
   T2MOD = bT1_CLK; /* Divide the system clock by 12 */
-  #endif
+  EA  = 1;     /* Enable global interrupt */
+  EX0 = 1;    // Enable INT0
+  /** INT0 is edge triggered */
+  IT0 = 1;    // INT0 is edge triggered
+
+  // Configure Timer1 with the FSYS/1 (24MHz)
+  ConfigTimer1(T1_CLK_DIV1);
+  // Configure Timer 2 in Capture mode. FSYS/12 (2MHz)
+  ConfigTimer2();
+  // Just in case
   CDC_readPointer = 0;
   // Main loop
   while(1) {
-
     switch (mode)
     {
       case IR_S:
@@ -147,10 +152,9 @@ void main(void) {
       case IR_MAIN:
         if(CDC_available()) {  // something coming in?
           char byte = CDC_read_b(); // read the character ...  
-          
           switch (byte)
           {
-              case 'S': //IRIO Sampling Mode
+              case 'S': //Sampling Mode IR TX and IR RX
               case 's': 
                   irsSetup();
                   mode = IR_S;
@@ -166,6 +170,6 @@ void main(void) {
       }
       default:
         break;
-    }    
+    }   
   }
 }
