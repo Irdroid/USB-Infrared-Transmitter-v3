@@ -23,6 +23,8 @@ extern uint8_t * cdc_In_buffer;
 
 uint8_t *OutPtr; // Same naming of this pointer as in the irtoy code
 
+uint16_t target_freq;
+
 static unsigned char TxBuffCtr; // Transmit buffer counter
 static unsigned char h, l, tmr0_buf[3]; // Timer0 buffer
 __xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
@@ -31,8 +33,8 @@ __xdata struct _irtoy irToy; // We store the irToy structure in the xRAM
 #define IRS_TRANSMIT_LO	1
 
 #ifdef SOFT_PWM
-__xdata uint16_t timer1_pwm_val;
-__xdata uint16_t *timer1_pwm_ptr = &timer1_pwm_val;
+uint16_t timer1_pwm_val;
+uint16_t *timer1_pwm_ptr = &timer1_pwm_val;
 #endif
 
 /** @brief A Structure, holding the Irdroid USB Infrared Transceiver IRs data */
@@ -96,6 +98,7 @@ void timer0_int_callback(void)
                 //disable the PWM, output ground
                 PWMoff();
                 LedOff();
+
                 IE0 = 0;    // Clear INT0 Flag
                 EX0 = 1;    // Enable INT0 (RX Mode)
                 IE0 = 0;    // Clear INT0 Flag
@@ -129,18 +132,24 @@ void timer0_int_callback(void)
  *  to the USB host , when used in IR RX mode.
 */
 void timer1_int_callback(void){
-  
-    if(irS.TX == 0){
-      TR1 = 0;  // Disable Timer 1
-      irS.flushflag = true;
-    }else{
-    #ifdef SOFT_PWM
-    PIN_toggle(PIN_PWM); // Toggle the PWM pin
-     // Set timer1 High and Low SFRs again
-    TH1 = (*timer1_pwm_ptr >> 8) & 0xff;
-    TL1 = *timer1_pwm_ptr;
-    #endif
+    // Fast path: if not transmitting, shut down and flag for USB flush
+    if(!irS.TX){
+        TR1 = 0;           // Disable Timer 1 immediately
+        irS.flushflag = 1; // signal usb-service to flush
+        return;            // early exit avoids extra branching
     }
+
+#ifdef SOFT_PWM
+    /* Read the PWM timer value once from external xdata; this
+       reduces the number of slow __xdata accesses and avoids
+       dereferencing the pointer twice. */
+    uint16_t pwm = *timer1_pwm_ptr;
+    PIN_toggle(PIN_PWM);          // Toggle the PWM pin
+
+    /* Update Timer1 registers with the pre–inverted half‑period. */
+    TH1 = pwm >> 8;
+    TL1 = pwm;
+#endif
 }
 static uint16_t calculateGap(void){
     uint32_t timer_gap = irS.t2_count * 65535;
@@ -200,14 +209,6 @@ void timer2_int_callback(void){
     }
 }
 
-/** The EXT0 pin and pin 1.1 are wire together with,
- *  the IR Receiver, so that we have a way to turn on Timer2 
- *  when we have a pin edge change
- */
-void ext0_interrupt(void) __interrupt(INT_NO_INT0){
-    ENABLE_TIMER2();
-    cdc_In_buffer = inWhich(); 
-}
 // ============================================================================
 // Function Definitions
 // ============================================================================
@@ -298,6 +299,9 @@ void irsSetup(void) {
     irS.sendfinish = 0;
     irS.handshake = 0;
     irS.RXcompleted = 0;
+    if(target_freq == 0){
+        PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
+    }
     WaitInReady();
     cdc_In_buffer = inWhich();
     cdc_In_buffer[0] = 'S'; //answer to the host that we are in sampling mode
@@ -307,6 +311,7 @@ void irsSetup(void) {
     CDC_flush(); 
     while(CDC_writeBusyFlag);
     cdc_In_buffer = inWhich(); 
+    EX0 = 1;    // Enable INT0 (RX Mode)
 }
 
 unsigned char irsService(void)
@@ -321,7 +326,9 @@ unsigned char irsService(void)
     }
 
     if (irS.TXsamples > 0) {
-        
+        EX0 = 0;
+        DISABLE_TIMER2();
+        EXF2 = 0;
         switch (irIOstate) { 
             case I_IDLE:
                 switch (irToy.s[TxBuffCtr]) {
@@ -330,11 +337,7 @@ unsigned char irsService(void)
                         ET0 = 0; // Disable Timer 0 interrupt
                         TR0 = 0; //enable the timer
                         irS.TX = 0;
-                        PwmConfigure(PWM_FREQ, timer1_pwm_ptr);
-                        ConfigTimer1(T1_CLK_DIV12);
-                        EX0 = 0;
-                        DISABLE_TIMER2();
-                        EXF2 = 0;
+                      
                         irS.txflag = 0; //transmit flag =0 reset the transmit flag
                         irIOstate = I_TX_STATE; //change to transmit data processing state
 						tmr0_buf[2]=0x00; //last data packet flag
@@ -482,10 +485,12 @@ unsigned char irsService(void)
                     case IRIO_HANDSHAKE:
                         DBG("HANDSHAKE %x\n", irToy.s[TxBuffCtr]);
                         irS.handshake = 1;
+                        EX0 = 1;    // Enable INT0 (RX Mode)
                         break;
                     case IRIO_NOTIFYONCOMPLETE:
                         DBG("NOTIFY COMPLETE %x\n", irToy.s[TxBuffCtr]);
                         irS.sendfinish = 1;
+                        EX0 = 1;    // Enable INT0 (RX Mode)
                         break;
                     case IRIO_GETCNT:
                         WaitInReady();
@@ -495,9 +500,11 @@ unsigned char irsService(void)
                         cdc_In_buffer[2] = (txcnt & 0xff);
                         CDC_writePointer += 3;
                         CDC_flush(); // flush the buffer 
+                        EX0 = 1;    // Enable INT0 (RX Mode)
                         break;
                     case IRIO_RETURNTXCNT:
                         irS.sendcount = 1;
+                        EX0 = 1;    // Enable INT0 (RX Mode)
                         break;
                     case IRIO_SETUP_PWM:
                         TxBuffCtr++;
@@ -508,10 +515,11 @@ unsigned char irsService(void)
                         	while(1); 
                         }else{
 							/** Convert Irtoy PWM setting to HZ */
-							uint16_t freq = irtoy_pwm_to_hz(irToy.s[TxBuffCtr]);
+							target_freq = irtoy_pwm_to_hz(irToy.s[TxBuffCtr]);
 							DBG("Frequency(Hz): %u\n", freq)
 							/* Configure the software PWM setting for the desired frequency */
-						//	PwmConfigure(freq, timer1_pwm_ptr);
+							PwmConfigure(target_freq, timer1_pwm_ptr);
+                            EX0 = 1;    // Enable INT0 (RX Mode)
 						}
                         irS.TXsamples -=2;
                         break;

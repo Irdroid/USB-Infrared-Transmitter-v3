@@ -47,6 +47,7 @@
 __xdata uint8_t dbg_buff[20];
 #endif
 extern uint8_t CDC_readPointer;     // data pointer for fetching
+extern uint16_t target_freq;
 /** References to the CDC in and out buffers */
 register uint8_t * cdc_Out_buffer = (uint8_t *) EP2_buffer; 
 register uint8_t * cdc_In_buffer = (uint8_t *) EP2_buffer+128; 
@@ -68,6 +69,15 @@ void timer1_interrupt(void) __interrupt(INT_NO_TMR1)
 /** Timer 2 Interrupt Service Routine (Vector 5) */
 void Timer2_ISR(void) __interrupt (INT_NO_TMR2) {
   timer2_int_callback(); 
+}
+
+/** The EXT0 pin and pin 1.1 are wire together with,
+ *  the IR Receiver, so that we have a way to turn on Timer2 
+ *  when we have a pin edge change
+ */
+void ext0_interrupt(void) __interrupt(INT_NO_INT0){
+    ENABLE_TIMER2();
+    cdc_In_buffer = inWhich(); 
 }
 
 static enum _mode {
@@ -135,13 +145,12 @@ void main(void) {
   EX0 = 1;    // Enable INT0
   /** INT0 is edge triggered */
   IT0 = 1;    // INT0 is edge triggered
-
-  // Configure Timer1 with the FSYS/1 (24MHz)
-  ConfigTimer1(T1_CLK_DIV1);
   // Configure Timer 2 in Capture mode. FSYS/12 (2MHz)
   ConfigTimer2();
   // Just in case
   CDC_readPointer = 0;
+  // Zero target frequency on startup
+  target_freq = 0; 
   // Main loop
   while(1) {
     switch (mode)

@@ -19,7 +19,7 @@
 #define T1_CLK_DIV12  0     // Divide system clock by 12
 #define T1_CLK_DIV1   1     // Use the system clock w/o division
 #define ENABLE_TIMER2() ET2=1;TR2=1;    // Enable Timer2
-#define DISABLE_TIMER2() ET2 = 0;TR2=0; // Disable Timer 2
+#define DISABLE_TIMER2() TR2=0;ET2 = 0; // Disable Timer 2
 
 // ===================================================================================
 // Function declarations
