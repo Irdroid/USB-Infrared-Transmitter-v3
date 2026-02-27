@@ -100,9 +100,6 @@ inline void timer1_int_callback(void);
 /** @brief Timer2 Interrupt callback routine */
 inline void timer2_int_callback(void);  
 
-extern void ext0_interrupt(void)__interrupt(INT_NO_INT0);
-
-
 /** @brief This functions is used to configure a PWM-like output on
  *  one of the GPIO pins e.g Soft PWM
  * 

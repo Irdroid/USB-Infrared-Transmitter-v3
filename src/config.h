@@ -11,13 +11,16 @@
 #define IRRX P32                      // IR Receive Pin
 #define SOFT_PWM_MIN_PER    0.000000167F// minimum timer tick for soft PWM
 #define SOFT_PWM
-#define SPWM_DRIFT          19        // We observe 3us PWM Drift, this is correction constant
+#define SPWM_DRIFT          35        // We observe 3us PWM Drift, this is correction constant
 #define IRTOY_FREQ 48000000           // Irtoy Xtal frequency
 #define IRTOY_MULTIPLIER 16           // Irtoy multiplier for the Xtal
 
 #ifdef SOFT_PWM
-#define PWM_FREQ            31250     // PWM Carrier is 38KHz
+#define PWM_FREQ            38000     // PWM Carrier is 38KHz
+#else
+#define PWM_FREQ            31250     // PWM Carrier is 31.25KHz 
 #endif
+
 // USB device descriptor
 #define USB_VENDOR_ID       0x4d8     // VID Irdroid
 #define USB_PRODUCT_ID      0xf58b   // PID Irdroid 
