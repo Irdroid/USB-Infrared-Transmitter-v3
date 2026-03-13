@@ -26,7 +26,7 @@ CC         = sdcc
 OBJCOPY    = objcopy
 PACK_HEX   = packihx
 ISPTOOL   ?= python3 $(TOOLS)/chprog.py $(TARGET).bin
-
+ISPTOOLBG   ?= python3 $(TOOLS)/chprogbg.py $(TARGET).bin
 # Compiler Flags
 CFLAGS  = -mmcs51 --model-small --no-xinit-opt -DF_CPU=$(FREQ_SYS) -I$(INCLUDE) -I.
 CFLAGS += --xram-size $(XRAM_SIZE) --xram-loc $(XRAM_LOC) --code-size $(CODE_SIZE)
@@ -71,6 +71,10 @@ $(TARGET).bin: $(TARGET).ihx
 flash: $(TARGET).bin size removetemp
 	@echo "Uploading to CH55x ..."
 	@$(ISPTOOL)
+
+flash-bg: $(TARGET).bin size removetemp
+	@echo "Uploading to CH55x (background) ..."
+	@$(ISPTOOLBG)
 
 all: $(TARGET).bin $(TARGET).hex size
 
